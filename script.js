@@ -50,26 +50,88 @@ function endGame() { }
 // SECTION 2 — Lefa: Logic & State
 // ============================================================
 
-// TODO(Lefa): character.velocityY += GRAVITY
-function applyGravity() { }
+function applyGravity() {
+  gameState.character.velocityY += GRAVITY;
+}
 
-// TODO(Lefa): character.y += velocityY, clamp to ground (y >= 0)
-function updateCharacterPosition() { }
+function updateCharacterPosition() {
+  gameState.character.y += gameState.character.velocityY;
 
-// TODO(Lefa): pushes new obstacle to gameState.obstacles, x at right edge
-function spawnObstacle() { }
+  // y is from the bottom, so < 0 means below ground
+  if (gameState.character.y < 0) {
+    gameState.character.y = 0;
+    gameState.character.velocityY = 0;
+  }
+}
 
-// TODO(Lefa): each obstacle.x -= OBSTACLE_SPEED * (deltaTime/16)
-function moveObstacles(deltaTime) { }
+function spawnObstacle() {
+  const containerWidth = gameEl.clientWidth;
+  const obstacleHeight = 30 + Math.random() * 30; // 30–60px, matches CSS height
 
-// TODO(Lefa): returns boolean — bounding box overlap
-function checkCollision() { }
+  gameState.obstacles.push({
+    x: containerWidth,
+    y: 0,
+    width: 20,          // matches .obstacle width in CSS
+    height: obstacleHeight,
+    passed: false       // ensures score counts once per obstacle
+  });
+}
 
-// TODO(Lefa): increments gameState.score when obstacle passes character's x
-function updateScore() { }
+function moveObstacles(deltaTime) {
+  // /16 normalizes speed to ~60fps so slow frames don't make obstacles jump
+  for (const obstacle of gameState.obstacles) {
+    obstacle.x -= OBSTACLE_SPEED * (deltaTime / 16);
+  }
 
-// TODO(Lefa): sets gameState.gameOver = true (named endGameLogic to avoid clash with Karim's endGame)
-function endGameLogic() { }
+  // Remove obstacles fully off the left edge
+  gameState.obstacles = gameState.obstacles.filter(
+    (obstacle) => obstacle.x + obstacle.width > 0
+  );
+}
+
+function checkCollision() {
+  const char = gameState.character;
+
+  // y is from the bottom: top edge = y + height, bottom edge = y
+  const charLeft = char.x;
+  const charRight = char.x + char.width;
+  const charBottom = char.y;
+  const charTop = char.y + char.height;
+
+  for (const obstacle of gameState.obstacles) {
+    const obsLeft = obstacle.x;
+    const obsRight = obstacle.x + obstacle.width;
+    const obsBottom = obstacle.y;
+    const obsTop = obstacle.y + obstacle.height;
+
+    if (
+      charRight > obsLeft &&
+      charLeft < obsRight &&
+      charTop > obsBottom &&
+      charBottom < obsTop
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function updateScore() {
+  const char = gameState.character;
+
+  for (const obstacle of gameState.obstacles) {
+    // passed flag prevents double-counting the same obstacle
+    if (!obstacle.passed && obstacle.x + obstacle.width < char.x) {
+      obstacle.passed = true;
+      gameState.score += 1;
+    }
+  }
+}
+
+function endGameLogic() {
+  gameState.gameOver = true;
+}
 
 // ============================================================
 // SECTION 3 — TONY: Output & Feedback
