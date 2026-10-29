@@ -3,25 +3,83 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Jumping Game</title>
+  <meta name="description" content="Jumping Game — a simple arcade challenge. Jump over obstacles and see how far you can go." />
+  <title>Jumping Game — One jump at a time</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- TODO(Karim): structure — this shell is a starting point, adjust as needed -->
-  <div id="game">
-    <div id="score">Score: 0</div>
-    <div id="character"></div>
+  <main class="page">
+    <header class="page-header">
+      <a class="brand" href="./index.html" aria-label="Jumping Game home">
+        <span class="brand-mark" aria-hidden="true">↗</span>
+        jumping<span class="brand-light">game</span>
+      </a>
+      <span class="preview-badge">Layout preview</span>
+    </header>
 
-    <div id="game-over" class="hidden">
-      <h1>Game Over</h1>
-      <p>Final score: <span id="final-score">0</span></p>
-      <!-- TODO(Karim): wire click on restart button to initGame() -->
-      <button id="restart">Restart</button>
-    </div>
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">A tiny arcade escape</p>
+        <h1 id="page-title">Small jump.<br /><span>Big energy.</span></h1>
+      </div>
+      <p class="intro-copy">Find your rhythm. Clear the obstacles.<br />Take it one jump at a time.</p>
+    </section>
 
-    <!-- TODO(Karim): obstacle divs get appended into #game by renderObstacles() -->
-  </div>
+    <section class="arena" aria-labelledby="arena-title">
+      <div class="arena-toolbar">
+        <div>
+          <p class="eyebrow" id="arena-title">The playground</p>
+          <p class="mode">Endless run <span aria-hidden="true">/</span> One life</p>
+        </div>
+        <div id="score" role="status" aria-live="polite" aria-atomic="true">Score: 0</div>
+      </div>
 
+      <div class="game-frame">
+        <!-- #game is the movement boundary: x is left, y is bottom, in pixels.
+             Read gameEl.clientWidth / clientHeight for the playable dimensions. -->
+        <div id="game" role="region" aria-label="Game area" aria-describedby="game-instructions" tabindex="0">
+          <svg class="scenery" viewBox="0 0 1000 400" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            <circle cx="815" cy="85" r="32" fill="#e6edc8" />
+            <path d="M100 100h70m-50 12h72M620 65h65m-44 12h64" stroke="#d5dfd1" stroke-width="3" stroke-linecap="round" />
+            <path d="M0 350 120 280 240 350 410 255 610 350 800 275 1000 350V400H0Z" fill="#e5ebde" />
+            <path d="M0 375 200 330 360 380 600 315 800 375 1000 335V400H0Z" fill="#d9e3d0" />
+          </svg>
+          <div id="character" role="img" aria-label="Player"></div>
+
+          <div id="game-over" class="hidden" role="dialog" aria-modal="true" aria-labelledby="game-over-title" aria-describedby="game-over-score" tabindex="-1">
+            <p class="eyebrow">Every jump is a fresh start</p>
+            <h2 id="game-over-title">Nice run.</h2>
+            <p id="game-over-score">Final score: <span id="final-score">0</span></p>
+            <button id="restart" type="button">Try again <span aria-hidden="true">↗</span></button>
+          </div>
+          <!-- Tony's renderObstacles() appends obstacle elements directly to #game. -->
+        </div>
+        <div class="ground" aria-hidden="true"></div>
+      </div>
+
+      <div class="arena-footer">
+        <p id="game-instructions"><kbd>Space</kbd> to jump</p>
+        <p>Gameplay integration in progress</p>
+      </div>
+    </section>
+
+    <section class="how-to" aria-label="How to play">
+      <article>
+        <span class="step-number" aria-hidden="true">01</span>
+        <div><h2>Catch some air.</h2><p>Press Space to jump over an obstacle.</p></div>
+      </article>
+      <article>
+        <span class="step-number" aria-hidden="true">02</span>
+        <div><h2>Make it count.</h2><p>Each obstacle passed earns one point.</p></div>
+      </article>
+      <article>
+        <span class="step-number" aria-hidden="true">03</span>
+        <div><h2>Go again.</h2><p>Hit an obstacle? Restart for a fresh run.</p></div>
+      </article>
+    </section>
+
+    <footer class="page-footer"><span>Built for the joy of a good jump.</span><span>PROJECT 02 <span aria-hidden="true">↗</span></span></footer>
+  </main>
   <script src="script.js"></script>
 </body>
 </html>

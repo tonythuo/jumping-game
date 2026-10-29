@@ -1,50 +1,103 @@
-/* Baseline layout only — TODO(Tony): polish (colors, sizing, transitions) */
+﻿:root {
+  color-scheme: light;
+  --ink: #223b31;
+  --muted: #5a6a5e;
+  --paper: #f6f5ef;
+  --line: #d9ddd2;
+  --accent: #d8ed88;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
 
-body {
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, a, #game { -webkit-tap-highlight-color: transparent; }
+button { font: inherit; }
+a { color: inherit; }
+p, h1, h2 { margin: 0; }
+
+.page { max-width: 1080px; margin: 0 auto; padding: 28px 32px 20px; }
+.page-header, .arena-toolbar, .arena-footer, .page-footer {
   display: flex;
-  justify-content: center;
-  padding-top: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
 }
+.page-header { padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.brand { display: inline-flex; align-items: center; gap: 9px; font-size: 21px; font-weight: 750; text-decoration: none; letter-spacing: -1px; }
+.brand-light { font-weight: 400; margin-left: -9px; }
+.brand-mark { display: grid; place-items: center; width: 32px; height: 32px; background: var(--ink); color: var(--accent); border-radius: 9px; font-size: 25px; }
+.preview-badge { border: 1px solid var(--line); border-radius: 24px; padding: 7px 12px; color: var(--muted); font-size: 12px; }
+.intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; padding: 42px 0 32px; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; }
+h1 { margin-top: 12px; font-size: clamp(44px, 6.5vw, 72px); line-height: 1.02; font-weight: 750; letter-spacing: -3.5px; }
+h1 span { color: #627a49; }
+.intro-copy { padding-bottom: 5px; font-size: 15px; line-height: 1.8; color: var(--muted); }
 
+.arena { border: 1px solid #c9d1c2; border-radius: 18px; background: #fffef9; overflow: hidden; box-shadow: 0 10px 32px #223b3108; }
+.arena-toolbar { padding: 20px 24px; }
+.mode { margin-top: 7px; font-size: 13px; color: var(--muted); }
+.mode span { padding: 0 7px; color: #9ba692; }
+#score { padding: 10px 16px; background: var(--accent); border-radius: 9px; font: 700 23px ui-monospace, Consolas, monospace; white-space: nowrap; }
+.game-frame { margin: 0 12px; border: 1px solid #ced8c6; border-radius: 10px; overflow: hidden; }
 #game {
-  position: relative; /* container relative — children absolute */
-  width: 800px;
+  position: relative;
+  isolation: isolate;
+  width: 100%;
   height: 400px;
-  background: #eee;
+  padding: 0;
   overflow: hidden;
+  background: #eef2e7;
 }
-
+.scenery { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 #character {
-  position: absolute; /* positioned via left/bottom in renderCharacter() */
+  position: absolute;
+  left: 50px;
+  bottom: 0;
+  z-index: 1;
   width: 40px;
   height: 40px;
-  background: #333;
+  border: 2px solid var(--ink);
+  border-radius: 9px 9px 5px 5px;
+  background: var(--accent);
 }
+#character::before, #character::after { content: ""; position: absolute; top: 11px; width: 4px; height: 7px; border-radius: 2px; background: var(--ink); }
+#character::before { right: 16px; }
+#character::after { right: 7px; }
+.obstacle { position: absolute; bottom: 0; z-index: 1; width: 20px; border: 2px solid var(--ink); border-radius: 5px 5px 0 0; background: #77906c; }
+.ground { height: 24px; border-top: 2px solid #72865e; background: repeating-linear-gradient(110deg, #d2ddbf 0 12px, #dfe7d2 12px 14px); }
+.arena-footer { padding: 15px 24px; color: var(--muted); font-size: 12px; }
+.arena-footer p:first-child { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+kbd { padding: 4px 12px; border: 1px solid #cdd2c5; border-bottom-width: 3px; border-radius: 5px; background: #f8f8f2; font: 600 12px "Segoe UI", Arial, sans-serif; }
 
-.obstacle {
-  position: absolute;
-  bottom: 0;
-  width: 20px;
-  background: #666;
-}
+#game-over { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 20px; text-align: center; background: #f6f5eff5; }
+#game-over.hidden { display: none; }
+#game-over h2 { font-size: 48px; letter-spacing: -2px; }
+#game-over-score { color: var(--muted); }
+#final-score { font-weight: 700; color: var(--ink); }
+#restart { display: flex; align-items: center; gap: 28px; border: 0; border-radius: 8px; padding: 13px 20px; background: var(--ink); color: white; cursor: pointer; font-weight: 600; }
+#restart:hover { background: #395743; }
+#restart span { color: var(--accent); }
+:focus-visible { outline: 3px solid #526e30; outline-offset: 4px; }
+#game:focus-visible { outline-offset: -4px; }
 
-#score {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  font-size: 24px;
-}
+.how-to { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; padding: 30px 0; }
+.how-to article { display: flex; align-items: flex-start; gap: 12px; }
+.step-number { padding-top: 2px; color: #657853; font: 12px ui-monospace, Consolas, monospace; }
+.how-to h2 { font-size: 14px; font-weight: 650; }
+.how-to p { margin-top: 6px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.page-footer { padding-top: 18px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+.page-footer > span:last-child { font-size: 10px; letter-spacing: 1.3px; }
 
-#game-over {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.hidden {
-  display: none;
+@media (max-width: 640px) {
+  .page { padding: 20px 16px; }
+  .intro { display: block; padding: 30px 0 24px; }
+  h1 { letter-spacing: -2px; }
+  .intro-copy { margin-top: 18px; font-size: 14px; }
+  .arena-toolbar { padding: 16px; gap: 12px; }
+  #score { padding: 10px; font-size: 18px; }
+  .arena-footer { padding: 12px 16px; flex-wrap: wrap; gap: 10px; }
+  .how-to { grid-template-columns: 1fr; gap: 20px; padding: 24px 0; }
+  .page-footer { align-items: flex-start; font-size: 10px; }
 }
