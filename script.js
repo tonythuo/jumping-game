@@ -3,9 +3,38 @@
 // Sections below: Karim (input/orchestration), Logic (state), Tony (output)
 // ============================================================
 
+const player = {
+  x: 50,
+  y: 0,
+  ContainerWidth: 40,
+  containerHeight: 80,
+  velocityY: 0,
+  gravity: 0.5,
+  jumpForce: -12,
+  isJumping: false,
+  isGrounded: true,
+  state: 'idle', // 'idle', 'jumping', 'falling'
+
+  jump(){},
+  updateJump(){},
+  updateFall(){},
+  updateGravity(){},
+  init(){}
+}
+
+
+const obstacle = {
+  x: 0,
+  y: 0,
+  width: 20,
+  height: 40,
+  speed: 5,
+
+  init(){}
+};
 // --- CONTRACT: shared state + constants (edit only with team sign-off) ---
 const gameState = {
-  character: { x: 50, y: 0, velocityY: 0, width: 40, height: 40 },
+  character: player,
   obstacles: [],
   score: 0,
   gameOver: false,
@@ -23,7 +52,7 @@ const SPAWN_INTERVAL = 1500;
 // ============================================================
 
 // TODO(Karim): resets gameState, starts loop
-function initGame() { }
+function initGame() {}
 
 // TODO(Karim): calculates deltaTime, calls update() then render()
 function gameLoop(timestamp) { }
