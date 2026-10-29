@@ -1,0 +1,50 @@
+/* Baseline layout only — TODO(Tony): polish (colors, sizing, transitions) */
+
+body {
+  display: flex;
+  justify-content: center;
+  padding-top: 40px;
+}
+
+#game {
+  position: relative; /* container relative — children absolute */
+  width: 800px;
+  height: 400px;
+  background: #eee;
+  overflow: hidden;
+}
+
+#character {
+  position: absolute; /* positioned via left/bottom in renderCharacter() */
+  width: 40px;
+  height: 40px;
+  background: #333;
+}
+
+.obstacle {
+  position: absolute;
+  bottom: 0;
+  width: 20px;
+  background: #666;
+}
+
+#score {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 24px;
+}
+
+#game-over {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.hidden {
+  display: none;
+}

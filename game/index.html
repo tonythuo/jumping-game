@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jumping Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- TODO(Karim): structure — this shell is a starting point, adjust as needed -->
+  <div id="game">
+    <div id="score">Score: 0</div>
+    <div id="character"></div>
+
+    <div id="game-over" class="hidden">
+      <h1>Game Over</h1>
+      <p>Final score: <span id="final-score">0</span></p>
+      <!-- TODO(Karim): wire click on restart button to initGame() -->
+      <button id="restart">Restart</button>
+    </div>
+
+    <!-- TODO(Karim): obstacle divs get appended into #game by renderObstacles() -->
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
