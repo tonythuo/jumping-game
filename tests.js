@@ -19,6 +19,7 @@ function makeEl(parent) {
       contains: (c) => el.classes.has(c)
     },
     appendChild(child) { child.parent = el; el.children.push(child); },
+    addEventListener(type, fn) { events.documentListeners.push({ type, fn, target: el }); },
     remove() {
       if (!el.parent) return;
       const i = el.parent.children.indexOf(el);
@@ -47,6 +48,10 @@ function fakeRAF(cb) {
   return events.raf.nextId++;
 }
 
+function fakeCAF(id) {
+  events.raf.cancelled.push(id);
+}
+
 const ids = {
   character: makeEl(),
   score: makeEl(),
@@ -57,7 +62,7 @@ const ids = {
 };
 
 const events = {
-  raf: { pending: [], nextId: 1 },
+  raf: { pending: [], nextId: 1, cancelled: [] },
   documentListeners: [],
   windowListeners: []
 };
@@ -81,7 +86,7 @@ const fs = require('fs');
 const path = require('path');
 const src = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8');
 
-const game = new Function('document', 'window', 'requestAnimationFrame', src + `
+const game = new Function('document', 'window', 'requestAnimationFrame', 'cancelAnimationFrame', src + `
 ;return {
   gameState,
   gameEl, characterEl, gameOverEl, finalScoreEl,
@@ -89,7 +94,10 @@ const game = new Function('document', 'window', 'requestAnimationFrame', src + `
   moveObstacles, checkCollision, updateScore, endGameLogic,
   renderCharacter, renderObstacles, renderScore, showGameOver, clearContainer,
   initGame, gameLoop, handleKeydown, jump, update, render, endGame
-};`)(fakeDocument, fakeWindow, fakeRAF);
+};`)(fakeDocument, fakeWindow, fakeRAF, fakeCAF);
+
+// frames scheduled at script load — captured before any check() resets state
+const framesOnLoad = events.raf.pending.length;
 
 // ============================================================
 // Tiny harness: PASS/FAIL per test, exit 1 if any fail
@@ -116,8 +124,8 @@ function reset() {
   game.gameState.lastSpawnTime = 0;
   game.gameState.lastTimestamp = 0;
   events.raf.pending = [];
-  events.documentListeners = [];
-  events.windowListeners = [];
+  // NOTE: listener arrays are NOT cleared — wiring is registered once at
+  // script load and the wiring tests must still find it
   ids.game.children = [];
   ids.character.style = {};
   ids['game-over'].classes.add('hidden');
@@ -142,15 +150,16 @@ check('applyGravity adds GRAVITY to velocityY', () => {
   expect(game.gameState.character.velocityY === 1, 'second call should give 1, got ' + game.gameState.character.velocityY);
 });
 
-check('updateCharacterPosition adds velocityY to y', () => {
-  game.gameState.character.velocityY = 2;
+check('updateCharacterPosition moves y against velocityY (falling lowers y)', () => {
+  game.gameState.character.y = 10;
+  game.gameState.character.velocityY = 2; // falling
   game.updateCharacterPosition();
-  expect(game.gameState.character.y === 2, 'y should be 2, got ' + game.gameState.character.y);
+  expect(game.gameState.character.y === 8, 'falling should lower y to 8, got ' + game.gameState.character.y);
 });
 
 check('updateCharacterPosition clamps to ground and zeroes velocity', () => {
   game.gameState.character.y = 1;
-  game.gameState.character.velocityY = -3; // just about to go below ground
+  game.gameState.character.velocityY = 3; // falling fast enough to go below ground
   game.updateCharacterPosition();
   expect(game.gameState.character.y === 0, 'y should clamp to 0, got ' + game.gameState.character.y);
   expect(game.gameState.character.velocityY === 0, 'velocityY should reset to 0, got ' + game.gameState.character.velocityY);
@@ -341,6 +350,16 @@ check('initGame schedules the first frame', () => {
   expect(events.raf.pending.length === 1, 'requestAnimationFrame should be called once, got ' + events.raf.pending.length);
 });
 
+check('game auto-starts: a frame is scheduled when the script loads', () => {
+  expect(framesOnLoad >= 1, 'script load should schedule the first frame, got ' + framesOnLoad);
+});
+
+check('restart does not run a second loop: the old frame is cancelled', () => {
+  const before = events.raf.cancelled.length;
+  game.initGame(); // already running from load — restart must cancel the old chain
+  expect(events.raf.cancelled.length === before + 1, 'the in-flight frame should be cancelled, got ' + (events.raf.cancelled.length - before) + ' cancels');
+});
+
 check('gameLoop first call is a baseline: no movement, no teleport', () => {
   game.gameLoop(1000);
   expect(game.gameState.character.y === 0, 'character should stay on ground, got ' + game.gameState.character.y);
@@ -352,7 +371,7 @@ check('gameLoop moves the game proportionally to deltaTime', () => {
   game.gameState.character.y = 10; // airborne so gravity+position are observable
   game.gameLoop(1000);
   game.gameLoop(1016); // one 60fps frame later
-  expect(game.gameState.character.y === 10.5, 'one 16ms frame of gravity should give y=10.5, got ' + game.gameState.character.y);
+  expect(game.gameState.character.y === 9.5, 'one 16ms frame of gravity should give y=9.5, got ' + game.gameState.character.y);
   expect(game.gameState.character.velocityY === 0.5, 'gravity should have applied once, got ' + game.gameState.character.velocityY);
 });
 
@@ -360,14 +379,13 @@ check('gameLoop runs update before render (character div tracks state)', () => {
   game.gameState.character.y = 10;
   game.gameLoop(1000);
   game.gameLoop(1016);
-  expect(ids.character.style.bottom === '10.5px', 'render should have painted the new y, got ' + ids.character.style.bottom);
+  expect(ids.character.style.bottom === '9.5px', 'render should have painted the new y, got ' + ids.character.style.bottom);
 });
 
 check('gameLoop schedules the next frame each call', () => {
   game.gameLoop(1000);
   expect(events.raf.pending.length === 1, 'one frame scheduled');
-  runFrame(1016);
-  game.gameLoop(1016);
+  runFrame(1016); // fires the scheduled frame, which must schedule the next
   expect(events.raf.pending.length === 1, 'next frame scheduled after the previous fired');
 });
 
@@ -380,7 +398,7 @@ check('gameLoop stops scheduling frames once game over', () => {
 check('update applies gravity, position, and obstacle movement in order', () => {
   game.gameState.character.y = 10;
   game.update(16, 100);
-  expect(game.gameState.character.y === 10.5, 'one physics step should run, got ' + game.gameState.character.y);
+  expect(game.gameState.character.y === 9.5, 'one physics step should run, got ' + game.gameState.character.y);
 });
 
 check('update spawns an obstacle only after SPAWN_INTERVAL', () => {
@@ -450,10 +468,10 @@ check('end-to-end: jump, fly, land, stop — physics wired together', () => {
   game.initGame();
   game.handleKeydown({ code: 'Space', preventDefault: () => {} });
   let t = 1000;
-  for (let i = 0; i < 3; i++) { t += 16; runFrame(t); } // frames fire the loop
+  for (let i = 0; i < 15; i++) { t += 16; runFrame(t); } // frames fire the loop
   const peak = game.gameState.character.y;
   expect(peak > 0, 'character must be airborne after jumping, got y=' + peak);
-  for (let i = 3; i < 20; i++) { t += 16; runFrame(t); }
+  for (let i = 15; i < 65; i++) { t += 16; runFrame(t); } // jump takes ~48 frames to land
   expect(game.gameState.character.y === 0, 'character should land back on ground, got ' + game.gameState.character.y);
   expect(game.gameState.character.velocityY === 0, 'velocity should be zero after landing, got ' + game.gameState.character.velocityY);
 });

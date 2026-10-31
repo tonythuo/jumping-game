@@ -51,29 +51,74 @@ const SPAWN_INTERVAL = 1500;
 // SECTION 1 — KARIM: Structure, Input & Orchestration
 // ============================================================
 
-// TODO(Karim): resets gameState, starts loop
-function initGame() {}
+// resets gameState, starts loop
+let frameId = 0;
+function initGame() {
+  gameState.score = 0;
+  gameState.obstacles = [];
+  gameState.gameOver = false;
+  gameState.lastSpawnTime = 0;
+  gameState.lastTimestamp = 0;
+  Object.assign(gameState.character, { x: 50, y: 0, velocityY: 0 });
+  clearContainer();
+  gameOverEl.classList.add('hidden');
+  if (frameId) cancelAnimationFrame(frameId); // no double loop on restart
+  frameId = requestAnimationFrame(gameLoop);
+}
 
-// TODO(Karim): calculates deltaTime, calls update() then render()
-function gameLoop(timestamp) { }
+// calculates deltaTime, calls update() then render()
+function gameLoop(timestamp) {
+  if (gameState.gameOver) return; // stop the loop, schedule nothing
 
-// TODO(Karim): calls jump() on spacebar
-function handleKeydown(event) { }
+  if (gameState.lastTimestamp === 0) {
+    // first frame after (re)start: seed the clock only, no delta yet
+    gameState.lastTimestamp = timestamp;
+  } else {
+    const deltaTime = timestamp - gameState.lastTimestamp;
+    gameState.lastTimestamp = timestamp;
+    update(deltaTime, timestamp);
+    render();
+  }
+  frameId = requestAnimationFrame(gameLoop);
+}
 
-// TODO(Karim): sets character.velocityY = JUMP_FORCE
-function jump() { }
+// calls jump() on spacebar
+function handleKeydown(event) {
+  if (event.code !== 'Space' || event.repeat) return;
+  event.preventDefault(); // keep space from scrolling the page
+  jump();
+}
 
-// TODO(Karim): calls Logic functions in order
-function update(deltaTime, timestamp) { }
+// sets character.velocityY = JUMP_FORCE
+function jump() {
+  gameState.character.velocityY = JUMP_FORCE;
+}
 
-// TODO(Karim): calls Tony's render functions
-function render() { }
+// calls Logic functions in order
+function update(deltaTime, timestamp) {
+  applyGravity();
+  updateCharacterPosition();
+  moveObstacles(deltaTime);
+  if (timestamp - gameState.lastSpawnTime > SPAWN_INTERVAL) {
+    spawnObstacle();
+    gameState.lastSpawnTime = timestamp;
+  }
+  updateScore();
+  if (checkCollision()) endGame();
+}
 
-// TODO(Karim): orchestrator — calls endGameLogic() + showGameOver()
-function endGame() { }
+// calls Tony's render functions
+function render() {
+  renderCharacter(gameState.character);
+  renderScore(gameState.score);
+  renderObstacles(gameState.obstacles);
+}
 
-// TODO(Karim): wire keydown listener to handleKeydown here
-// TODO(Karim): wire restart button click to initGame() here
+// orchestrator — calls endGameLogic() + showGameOver()
+function endGame() {
+  endGameLogic();
+  showGameOver(gameState.score);
+}
 
 // ============================================================
 // SECTION 2 — Lefa: Logic & State
@@ -84,7 +129,9 @@ function applyGravity() {
 }
 
 function updateCharacterPosition() {
-  gameState.character.y += gameState.character.velocityY;
+  // velocityY is downward-positive (JUMP_FORCE -12 = up), y is height
+  // above ground, so position integrates against velocity
+  gameState.character.y -= gameState.character.velocityY;
 
   // y is from the bottom, so < 0 means below ground
   if (gameState.character.y < 0) {
@@ -219,3 +266,8 @@ function showGameOver(finalScore) {
 function clearContainer() {
   gameEl.querySelectorAll('.obstacle').forEach(el => el.remove());
 }
+
+// wiring (after element refs — initGame touches gameEl/gameOverEl on load)
+document.addEventListener('keydown', handleKeydown);
+document.getElementById('restart').addEventListener('click', initGame);
+initGame(); // start the loop on page load, not only on restart
