@@ -1,4 +1,3 @@
-
 const player = {
   x: 50,
   y: 0,
@@ -24,8 +23,6 @@ const OBSTACLE_SPEED = 5;
 const SPAWN_INTERVAL = 1500;
 const RESTART_LOCKOUT_MS = 400;
 const MAX_FRAME_DT = 50;
-
-
 
 let frameId = 0;
 
@@ -117,7 +114,7 @@ function handleKeydown(event) {
 }
 
 function jump() {
-  if (!isGrounded()) return;
+  if (!isGrounded(gameState.character)) return;
   gameState.character.velocityY = JUMP_FORCE;
 }
 
@@ -148,8 +145,6 @@ function endGame(timestamp = performance.now()) {
   gameOverEl.focus();
 }
 
-
-
 function applyGravity() {
   gameState.character.velocityY += GRAVITY;
 }
@@ -168,7 +163,7 @@ function spawnObstacle() {
     x: gameEl.clientWidth,
     y: 0,
     width: 20,
-    height: 30 + Math.random() * 30,
+    height: getRandomNumber(30, 60, true),
     passed: false
   });
 }
@@ -182,25 +177,8 @@ function moveObstacles(deltaTime) {
   );
 }
 
-function isGrounded() {
-  return gameState.character.y <= 0 && gameState.character.velocityY === 0;
-}
-
 function checkCollision() {
-  const char = gameState.character;
-
-  for (const obstacle of gameState.obstacles) {
-    if (
-      char.x + char.width > obstacle.x &&
-      char.x < obstacle.x + obstacle.width &&
-      char.y + char.height > obstacle.y &&
-      char.y < obstacle.y + obstacle.height
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  return gameState.obstacles.some((obstacle) => isColliding(gameState.character, obstacle));
 }
 
 function updateScore() {
@@ -218,8 +196,6 @@ function endGameLogic() {
   gameState.gameOver = true;
 }
 
-
-
 const characterEl = document.getElementById('character');
 const scoreEl = document.getElementById('score');
 const gameEl = document.getElementById('game');
@@ -233,10 +209,6 @@ const obstacleEls = new WeakMap();
 function renderCharacter(char) {
   characterEl.style.left = char.x + 'px';
   characterEl.style.bottom = char.y + 'px';
-}
-
-function isOffscreen(obstacle) {
-  return obstacle.x < -20;
 }
 
 function removeObstacleDiv(obstacle) {
@@ -277,11 +249,6 @@ function showGameOver(finalScore) {
   finalScoreEl.textContent = finalScore;
 }
 
-function currentGameState() {
-  if (gameState.gameOver) return 'over';
-  return gameState.running ? 'running' : 'ready';
-}
-
 function renderBadge(state) {
   stateBadgeEl.textContent = { over: 'Game over', running: 'Running', ready: 'Ready' }[state];
   stateBadgeEl.className = 'preview-badge state-' + state;
@@ -292,7 +259,7 @@ function renderStartScreen(state) {
 }
 
 function renderState() {
-  const state = currentGameState();
+  const state = currentGameState(gameState);
   renderBadge(state);
   renderStartScreen(state);
 }

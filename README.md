@@ -6,15 +6,16 @@ Project 2 — team jumping game. Team schedule and role assignments live in [`AG
 
 - `index.html` — page structure
 - `style.css` — styles
+- `helpers.js` — shared helper functions (Karim)
 - `script.js` — all game code
 
 ## Who owns what
 
 | Person | Section in `script.js` | Owns |
 |---|---|---|
-| Karim | Section 1 | `initGame`, `resetGame`, `resetUI`, `startRun`, `frameDelta`, `gameLoop`, `handleKeydown`, `handleSpaceKey`, `handleEnterKey`, `restartLockoutElapsed`, `jump`, `update`, `render`, `endGame` — structure, input, orchestration |
-| Lefa | Section 2 | `applyGravity`, `updateCharacterPosition`, `spawnObstacle`, `moveObstacles`, `isGrounded`, `checkCollision`, `updateScore`, `endGameLogic` — logic & state |
-| Tony | Section 3 | `renderCharacter`, `renderObstacles`, `renderScore`, `showGameOver`, `renderState`, `currentGameState`, `renderBadge`, `renderStartScreen`, `clearContainer`, `isOffscreen`, `removeObstacleDiv`, `updateObstacleDiv` — output & feedback |
+| Karim | Section 1 + `helpers.js` | `initGame`, `resetGame`, `resetUI`, `startRun`, `frameDelta`, `gameLoop`, `handleKeydown`, `handleSpaceKey`, `handleEnterKey`, `restartLockoutElapsed`, `jump`, `update`, `render`, `endGame` — structure, input, orchestration; `helpers.js` — `isColliding`, `getRandomNumber`, `isGrounded`, `currentGameState`, `isOffscreen`, `copyObject`, `moveRect`, `distanceBetweenRects` |
+| Lefa | Section 2 | `applyGravity`, `updateCharacterPosition`, `spawnObstacle`, `moveObstacles`, `checkCollision`, `updateScore`, `endGameLogic` — logic & state |
+| Tony | Section 3 | `renderCharacter`, `renderObstacles`, `renderScore`, `showGameOver`, `renderState`, `clearContainer` — output & feedback |
 
 ## How the game works
 
