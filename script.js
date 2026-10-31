@@ -91,10 +91,15 @@ function gameLoop(timestamp) {
 
 // calls jump() on spacebar; Enter restarts when game over
 function handleKeydown(event) {
-  if (event.code !== 'Space' || event.repeat) return;
-  event.preventDefault(); // keep space from scrolling the page
-  if (!gameState.running) gameState.running = true; // first Space starts the run
-  jump();
+  if (event.repeat) return;
+  if (event.code === 'Space') {
+    event.preventDefault(); // keep space from scrolling the page
+    if (!gameState.running) gameState.running = true; // first Space starts the run
+    jump();
+  } else if ((event.code === 'Enter' || event.code === 'NumpadEnter') && gameState.gameOver) {
+    event.preventDefault(); // stop the focused restart button from also firing
+    initGame();
+  }
 }
 
 // sets character.velocityY = JUMP_FORCE
