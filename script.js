@@ -35,19 +35,30 @@ const MAX_FRAME_DT = 50;
 
 let frameId = 0;
 
-function initGame(autoStart = false) {
+function resetGame() {
   gameState.score = 0;
   gameState.obstacles = [];
   gameState.gameOver = false;
   gameState.gameOverAt = 0;
-  gameState.running = autoStart;
+  gameState.running = false;
   gameState.lastSpawnTime = 0;
   gameState.lastTimestamp = 0;
   Object.assign(gameState.character, { x: 50, y: 0, velocityY: 0 });
+}
+
+function resetUI() {
   clearContainer();
   gameOverEl.classList.add('hidden');
   renderState();
-  if (autoStart) gameEl.focus();
+}
+
+function initGame(autoStart = false) {
+  resetGame();
+  if (autoStart) {
+    gameState.running = true;
+    gameEl.focus();
+  }
+  resetUI();
   if (frameId) cancelAnimationFrame(frameId);
   frameId = requestAnimationFrame(gameLoop);
 }
@@ -59,42 +70,55 @@ function startRun() {
   gameEl.focus();
 }
 
+function frameDelta(timestamp) {
+  if (gameState.lastTimestamp === 0) return 0;
+  return Math.min(timestamp - gameState.lastTimestamp, MAX_FRAME_DT);
+}
+
 function gameLoop(timestamp) {
   if (gameState.gameOver) return;
 
-  if (gameState.lastTimestamp === 0) {
-    gameState.lastTimestamp = timestamp;
-  } else if (gameState.running) {
-    const deltaTime = Math.min(timestamp - gameState.lastTimestamp, MAX_FRAME_DT);
-    gameState.lastTimestamp = timestamp;
+  const deltaTime = frameDelta(timestamp);
+  gameState.lastTimestamp = timestamp;
+  if (gameState.running && deltaTime) {
     update(deltaTime, timestamp);
     render();
-  } else {
-    gameState.lastTimestamp = timestamp;
   }
   frameId = requestAnimationFrame(gameLoop);
+}
+
+function restartLockoutElapsed() {
+  return performance.now() - gameState.gameOverAt >= RESTART_LOCKOUT_MS;
+}
+
+function handleSpaceKey() {
+  if (gameState.gameOver) {
+    if (restartLockoutElapsed()) {
+      initGame(true);
+      jump();
+    }
+    return;
+  }
+  startRun();
+  jump();
+}
+
+function handleEnterKey() {
+  if (gameState.gameOver) {
+    initGame(true);
+  } else if (!gameState.running) {
+    startRun();
+  }
 }
 
 function handleKeydown(event) {
   if (event.repeat) return;
   if (event.code === 'Space') {
     event.preventDefault();
-    if (gameState.gameOver) {
-      if (performance.now() - gameState.gameOverAt >= RESTART_LOCKOUT_MS) {
-        initGame(true);
-        jump();
-      }
-      return;
-    }
-    startRun();
-    jump();
+    handleSpaceKey();
   } else if (event.code === 'Enter' || event.code === 'NumpadEnter') {
     event.preventDefault();
-    if (gameState.gameOver) {
-      initGame(true);
-    } else if (!gameState.running) {
-      startRun();
-    }
+    handleEnterKey();
   }
 }
 
@@ -147,14 +171,11 @@ function updateCharacterPosition() {
 }
 
 function spawnObstacle() {
-  const containerWidth = gameEl.clientWidth;
-  const obstacleHeight = 30 + Math.random() * 30;
-
   gameState.obstacles.push({
-    x: containerWidth,
+    x: gameEl.clientWidth,
     y: 0,
     width: 20,
-    height: obstacleHeight,
+    height: 30 + Math.random() * 30,
     passed: false
   });
 }
@@ -163,7 +184,6 @@ function moveObstacles(deltaTime) {
   for (const obstacle of gameState.obstacles) {
     obstacle.x -= OBSTACLE_SPEED * (deltaTime / 16);
   }
-
   gameState.obstacles = gameState.obstacles.filter(
     (obstacle) => obstacle.x + obstacle.width > 0
   );
@@ -172,22 +192,12 @@ function moveObstacles(deltaTime) {
 function checkCollision() {
   const char = gameState.character;
 
-  const charLeft = char.x;
-  const charRight = char.x + char.width;
-  const charBottom = char.y;
-  const charTop = char.y + char.height;
-
   for (const obstacle of gameState.obstacles) {
-    const obsLeft = obstacle.x;
-    const obsRight = obstacle.x + obstacle.width;
-    const obsBottom = obstacle.y;
-    const obsTop = obstacle.y + obstacle.height;
-
     if (
-      charRight > obsLeft &&
-      charLeft < obsRight &&
-      charTop > obsBottom &&
-      charBottom < obsTop
+      char.x + char.width > obstacle.x &&
+      char.x < obstacle.x + obstacle.width &&
+      char.y + char.height > obstacle.y &&
+      char.y < obstacle.y + obstacle.height
     ) {
       return true;
     }
@@ -230,25 +240,36 @@ function renderCharacter(char) {
   characterEl.style.bottom = char.y + 'px';
 }
 
+function isOffscreen(obstacle) {
+  return obstacle.x < -20;
+}
+
+function removeObstacleDiv(obstacle) {
+  const div = obstacleEls.get(obstacle);
+  if (!div) return;
+  div.remove();
+  obstacleEls.delete(obstacle);
+}
+
+function updateObstacleDiv(obstacle) {
+  let div = obstacleEls.get(obstacle);
+  if (!div) {
+    div = document.createElement('div');
+    div.className = 'obstacle';
+    gameEl.appendChild(div);
+    obstacleEls.set(obstacle, div);
+  }
+  div.style.left = obstacle.x + 'px';
+  div.style.height = obstacle.height + 'px';
+}
+
 function renderObstacles(obstacles) {
   for (const obstacle of obstacles) {
-    if (obstacle.x < -20) {
-      const gone = obstacleEls.get(obstacle);
-      if (gone) {
-        gone.remove();
-        obstacleEls.delete(obstacle);
-      }
-      continue;
+    if (isOffscreen(obstacle)) {
+      removeObstacleDiv(obstacle);
+    } else {
+      updateObstacleDiv(obstacle);
     }
-    let div = obstacleEls.get(obstacle);
-    if (!div) {
-      div = document.createElement('div');
-      div.className = 'obstacle';
-      gameEl.appendChild(div);
-      obstacleEls.set(obstacle, div);
-    }
-    div.style.left = obstacle.x + 'px';
-    div.style.height = obstacle.height + 'px';
   }
 }
 
@@ -261,11 +282,24 @@ function showGameOver(finalScore) {
   finalScoreEl.textContent = finalScore;
 }
 
-function renderState() {
-  const state = gameState.gameOver ? 'over' : gameState.running ? 'running' : 'ready';
+function currentGameState() {
+  if (gameState.gameOver) return 'over';
+  return gameState.running ? 'running' : 'ready';
+}
+
+function renderBadge(state) {
   stateBadgeEl.textContent = { over: 'Game over', running: 'Running', ready: 'Ready' }[state];
   stateBadgeEl.className = 'preview-badge state-' + state;
+}
+
+function renderStartScreen(state) {
   startScreenEl.classList.toggle('hidden', state !== 'ready');
+}
+
+function renderState() {
+  const state = currentGameState();
+  renderBadge(state);
+  renderStartScreen(state);
 }
 
 function clearContainer() {
