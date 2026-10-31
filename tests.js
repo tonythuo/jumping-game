@@ -64,7 +64,8 @@ const ids = {
   'final-score': makeEl(),
   restart: makeEl(),
   'state-badge': makeEl(),
-  'ready-hint': makeEl()
+  'start-screen': makeEl(),
+  'start-button': makeEl()
 };
 
 const events = {
@@ -79,6 +80,9 @@ function runFrame(timestamp) {
   events.raf.pending = [];
   for (const cb of pending) cb(timestamp);
 }
+
+// controllable wall clock for the restart-lockout (script.js uses performance.now())
+let fakeNow = 0;
 // clearContainer() queries obstacle divs inside the container
 const sel = '.obstacle';
 ids.game.querySelectorAll = () =>
@@ -92,15 +96,15 @@ const fs = require('fs');
 const path = require('path');
 const src = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8');
 
-const game = new Function('document', 'window', 'requestAnimationFrame', 'cancelAnimationFrame', src + `
+const game = new Function('document', 'window', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance', src + `
 ;return {
   gameState,
   gameEl, characterEl, gameOverEl, finalScoreEl,
   applyGravity, updateCharacterPosition, spawnObstacle,
   moveObstacles, checkCollision, updateScore, endGameLogic,
   renderCharacter, renderObstacles, renderScore, showGameOver, clearContainer,
-  initGame, gameLoop, handleKeydown, jump, update, render, endGame
-};`)(fakeDocument, fakeWindow, fakeRAF, fakeCAF);
+  initGame, gameLoop, handleKeydown, jump, update, render, endGame, startRun
+};`)(fakeDocument, fakeWindow, fakeRAF, fakeCAF, { now: () => fakeNow });
 
 // frames scheduled at script load — captured before any check() resets state
 const framesOnLoad = events.raf.pending.length;
@@ -361,10 +365,10 @@ check('game auto-starts: a frame is scheduled when the script loads', () => {
   expect(framesOnLoad >= 1, 'script load should schedule the first frame, got ' + framesOnLoad);
 });
 
-check('ready-pause on load: badge Ready, world frozen until first Space', () => {
+check('ready-pause on load: start screen shows, world frozen until first Space', () => {
   game.initGame(); // what the script does on page load
   expect(ids['state-badge'].textContent === 'Ready', 'badge should say Ready, got ' + ids['state-badge'].textContent);
-  expect(ids['ready-hint'].classes.has('hidden') === false, 'ready hint should be visible');
+  expect(ids['start-screen'].classes.has('hidden') === false, 'start screen should be visible on load');
   let t = 1000;
   game.gameLoop(t);
   for (let i = 0; i < 124; i++) { t += 16; runFrame(t); } // ~2s of frames
@@ -374,15 +378,28 @@ check('ready-pause on load: badge Ready, world frozen until first Space', () => 
   expect(ids['state-badge'].textContent === 'Ready', 'badge should still say Ready');
 });
 
-check('first Space starts the run: badge flips to Running and world moves', () => {
+check('first Space starts the run: start screen hides, badge flips to Running', () => {
   game.initGame();
   let t = 1000;
   runFrame(t); // first frame: seeds the clock
   game.handleKeydown({ code: 'Space', preventDefault: () => {} });
   t += 16; runFrame(t); // frame after the press: update + render
   expect(ids['state-badge'].textContent === 'Running', 'badge should say Running, got ' + ids['state-badge'].textContent);
-  expect(ids['ready-hint'].classes.has('hidden') === true, 'ready hint should hide once running');
+  expect(ids['start-screen'].classes.has('hidden') === true, 'start screen should hide once running');
   expect(game.gameState.character.y > 0, 'character should be airborne, got ' + game.gameState.character.y);
+});
+
+check('start button click starts the run without a Space press', () => {
+  game.initGame();
+  const click = events.documentListeners.find((l) => l.type === 'click' && l.target === ids['start-button']);
+  expect(click !== undefined, 'start button should have a click listener');
+  click.fn({ preventDefault: () => {} });
+  expect(game.gameState.running === true, 'run should start, got ' + game.gameState.running);
+  expect(ids['start-screen'].classes.has('hidden') === true, 'start screen should hide');
+  expect(ids['state-badge'].textContent === 'Running', 'badge should say Running');
+  let t = 2000;
+  game.gameLoop(t); t += 16; runFrame(t); t += 16; runFrame(t);
+  expect(game.gameState.character.y > 0 || game.gameState.obstacles.length > 0 || game.gameState.score >= 0, 'world should run after start');
 });
 
 check('collision shows Game over badge; restart returns to Ready', () => {
@@ -394,11 +411,23 @@ check('collision shows Game over badge; restart returns to Ready', () => {
   game.gameState.obstacles.push({ x: 55, y: 0, width: 20, height: 40, passed: false });
   t += 16; runFrame(t); // frame that collides
   expect(ids['state-badge'].textContent === 'Game over', 'badge should say Game over, got ' + ids['state-badge'].textContent);
-  expect(ids['ready-hint'].classes.has('hidden') === true, 'ready hint should stay hidden');
+  expect(ids['start-screen'].classes.has('hidden') === true, 'start screen should stay hidden');
   const click = events.documentListeners.find((l) => l.type === 'click' && l.target === ids.restart);
   click.fn({ preventDefault: () => {} });
-  expect(ids['state-badge'].textContent === 'Ready', 'badge should be Ready again after restart, got ' + ids['state-badge'].textContent);
-  expect(ids['ready-hint'].classes.has('hidden') === false, 'ready hint should return after restart');
+  expect(ids['state-badge'].textContent === 'Running', 'restart should go straight to Running, got ' + ids['state-badge'].textContent);
+  expect(ids['start-screen'].classes.has('hidden') === true, 'start screen must not return after restart');
+  expect(game.gameState.running === true, 'restart should start the run immediately');
+});
+
+check('initGame(true) restarts straight into the run with no start screen', () => {
+  game.gameState.running = true;
+  game.gameState.score = 5;
+  game.gameState.obstacles.push({ x: 300, y: 0, width: 20, height: 40, passed: false });
+  game.initGame(true);
+  expect(game.gameState.running === true, 'restart should run immediately, got ' + game.gameState.running);
+  expect(ids['start-screen'].classes.has('hidden') === true, 'start screen must not show on restart');
+  expect(ids['state-badge'].textContent === 'Running', 'badge should say Running, got ' + ids['state-badge'].textContent);
+  expect(game.gameState.score === 0 && game.gameState.obstacles.length === 0, 'state should still reset');
 });
 
 check('restart does not run a second loop: the old frame is cancelled', () => {
@@ -541,6 +570,73 @@ check('Enter is a no-op while the game is running', () => {
   expect(game.gameState.gameOver === false, 'game should keep running');
   expect(game.gameState.score === 3, 'score must not reset mid-run');
   expect(game.gameState.obstacles.length === 1, 'obstacles must not clear mid-run');
+});
+
+check('collision records gameOverAt from the frame timestamp', () => {
+  game.initGame(true);
+  game.gameState.obstacles.push({ x: 55, y: 0, width: 20, height: 40, passed: false });
+  game.update(16, 4000);
+  expect(game.gameState.gameOver === true, 'collision should end the game');
+  expect(game.gameState.gameOverAt === 4000, 'gameOverAt should be the frame time, got ' + game.gameState.gameOverAt);
+});
+
+check('Space during the restart lockout does nothing', () => {
+  fakeNow = 5000;
+  game.gameState.gameOver = true;
+  game.gameState.gameOverAt = 4800; // 200ms ago — inside the 400ms window
+  game.gameState.score = 12;
+  game.gameState.obstacles.push({ x: 150, y: 0, width: 20, height: 40, passed: false });
+  const cancels = events.raf.cancelled.length;
+  game.handleKeydown({ code: 'Space', preventDefault: () => {} });
+  expect(game.gameState.gameOver === true, 'game must stay over during the lockout');
+  expect(game.gameState.score === 12, 'score must be untouched');
+  expect(game.gameState.obstacles.length === 1, 'obstacles must be untouched');
+  expect(events.raf.cancelled.length === cancels, 'no restart, no loop churn');
+  expect(game.gameState.character.y === 0, 'character must not jump');
+});
+
+check('Space after the lockout restarts into the run and jumps', () => {
+  fakeNow = 5400;
+  game.gameState.gameOver = true;
+  game.gameState.gameOverAt = 4800; // 600ms ago — past the window
+  game.gameState.score = 9;
+  const cancels = events.raf.cancelled.length;
+  game.handleKeydown({ code: 'Space', preventDefault: () => {} });
+  expect(game.gameState.gameOver === false, 'Space should restart after the lockout');
+  expect(game.gameState.running === true, 'restart should run immediately, got ' + game.gameState.running);
+  expect(game.gameState.score === 0, 'score should reset');
+  expect(game.gameState.gameOverAt === 0, 'gameOverAt should clear on restart');
+  expect(game.gameState.character.velocityY === -12, 'restart-Space should also jump, got ' + game.gameState.character.velocityY);
+  expect(events.raf.cancelled.length === cancels + 1, 'the old loop should be cancelled');
+});
+
+check('Enter restarts immediately even inside the lockout window', () => {
+  fakeNow = 5000;
+  game.gameState.gameOver = true;
+  game.gameState.gameOverAt = 4990; // 10ms ago — deep inside the window
+  game.handleKeydown({ code: 'Enter', preventDefault: () => {} });
+  expect(game.gameState.gameOver === false, 'Enter should bypass the lockout');
+  expect(game.gameState.running === true, 'Enter restart should run immediately');
+});
+
+check('Enter on the start screen starts the run without jumping', () => {
+  game.initGame(); // ready-pause, start screen showing
+  expect(ids['start-screen'].classes.has('hidden') === false, 'start screen should be visible before Enter');
+  let prevented = false;
+  game.handleKeydown({ code: 'Enter', preventDefault: () => { prevented = true; } });
+  expect(prevented === true, 'Enter should preventDefault (focused start button would double-fire)');
+  expect(game.gameState.running === true, 'Enter should start the run from ready state');
+  expect(ids['start-screen'].classes.has('hidden') === true, 'start screen should hide');
+  expect(ids['state-badge'].textContent === 'Running', 'badge should say Running, got ' + ids['state-badge'].textContent);
+  expect(game.gameState.character.velocityY === 0, 'Enter must not jump, got ' + game.gameState.character.velocityY);
+  expect(game.gameState.character.y === 0, 'character must stay on the ground');
+});
+
+check('NumpadEnter on the start screen also starts the run', () => {
+  game.initGame();
+  game.handleKeydown({ code: 'NumpadEnter', preventDefault: () => {} });
+  expect(game.gameState.running === true, 'NumpadEnter should start the run');
+  expect(game.gameState.character.velocityY === 0, 'NumpadEnter must not jump');
 });
 
 check('end-to-end: jump, fly, land, stop — physics wired together', () => {
