@@ -29,6 +29,8 @@ p, h1, h2 { margin: 0; }
 .brand-light { font-weight: 400; margin-left: -9px; }
 .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; background: var(--ink); color: var(--accent); border-radius: 9px; font-size: 25px; }
 .preview-badge { border: 1px solid var(--line); border-radius: 24px; padding: 7px 12px; color: var(--muted); font-size: 12px; }
+#state-badge.state-running { background: var(--accent); border-color: transparent; color: var(--ink); }
+#state-badge.state-over { background: var(--ink); border-color: var(--ink); color: var(--accent); }
 .intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; padding: 42px 0 32px; }
 .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; }
 h1 { margin-top: 12px; font-size: clamp(44px, 6.5vw, 72px); line-height: 1.02; font-weight: 750; letter-spacing: -3.5px; }
@@ -51,6 +53,8 @@ h1 span { color: #627a49; }
   background: #eef2e7;
 }
 .scenery { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#ready-hint { position: absolute; z-index: 1; top: 38%; left: 50%; transform: translate(-50%, -50%); padding: 10px 18px; border-radius: 24px; background: #f6f5efdd; font-size: 13px; font-weight: 600; white-space: nowrap; }
+#ready-hint.hidden { display: none; }
 #character {
   position: absolute;
   left: 50px;

@@ -16,7 +16,11 @@ function makeEl(parent) {
     classList: {
       add: (c) => el.classes.add(c),
       remove: (c) => el.classes.delete(c),
-      contains: (c) => el.classes.has(c)
+      contains: (c) => el.classes.has(c),
+      toggle: (c, force) => {
+        if (force === undefined) force = !el.classes.has(c);
+        force ? el.classes.add(c) : el.classes.delete(c);
+      }
     },
     appendChild(child) { child.parent = el; el.children.push(child); },
     addEventListener(type, fn) { events.documentListeners.push({ type, fn, target: el }); },
@@ -58,7 +62,9 @@ const ids = {
   game: makeEl(),
   'game-over': makeEl(),
   'final-score': makeEl(),
-  restart: makeEl()
+  restart: makeEl(),
+  'state-badge': makeEl(),
+  'ready-hint': makeEl()
 };
 
 const events = {
@@ -121,6 +127,7 @@ function reset() {
   game.gameState.obstacles = [];
   game.gameState.score = 0;
   game.gameState.gameOver = false;
+  game.gameState.running = false; // load state: ready-pause
   game.gameState.lastSpawnTime = 0;
   game.gameState.lastTimestamp = 0;
   events.raf.pending = [];
@@ -354,6 +361,46 @@ check('game auto-starts: a frame is scheduled when the script loads', () => {
   expect(framesOnLoad >= 1, 'script load should schedule the first frame, got ' + framesOnLoad);
 });
 
+check('ready-pause on load: badge Ready, world frozen until first Space', () => {
+  game.initGame(); // what the script does on page load
+  expect(ids['state-badge'].textContent === 'Ready', 'badge should say Ready, got ' + ids['state-badge'].textContent);
+  expect(ids['ready-hint'].classes.has('hidden') === false, 'ready hint should be visible');
+  let t = 1000;
+  game.gameLoop(t);
+  for (let i = 0; i < 124; i++) { t += 16; runFrame(t); } // ~2s of frames
+  expect(game.gameState.obstacles.length === 0, 'nothing should spawn while paused');
+  expect(game.gameState.character.y === 0, 'character should stay on the ground');
+  expect(game.gameState.score === 0, 'score should stay 0');
+  expect(ids['state-badge'].textContent === 'Ready', 'badge should still say Ready');
+});
+
+check('first Space starts the run: badge flips to Running and world moves', () => {
+  game.initGame();
+  let t = 1000;
+  runFrame(t); // first frame: seeds the clock
+  game.handleKeydown({ code: 'Space', preventDefault: () => {} });
+  t += 16; runFrame(t); // frame after the press: update + render
+  expect(ids['state-badge'].textContent === 'Running', 'badge should say Running, got ' + ids['state-badge'].textContent);
+  expect(ids['ready-hint'].classes.has('hidden') === true, 'ready hint should hide once running');
+  expect(game.gameState.character.y > 0, 'character should be airborne, got ' + game.gameState.character.y);
+});
+
+check('collision shows Game over badge; restart returns to Ready', () => {
+  game.initGame();
+  let t = 1000;
+  runFrame(t);
+  game.handleKeydown({ code: 'Space', preventDefault: () => {} });
+  t += 16; runFrame(t);
+  game.gameState.obstacles.push({ x: 55, y: 0, width: 20, height: 40, passed: false });
+  t += 16; runFrame(t); // frame that collides
+  expect(ids['state-badge'].textContent === 'Game over', 'badge should say Game over, got ' + ids['state-badge'].textContent);
+  expect(ids['ready-hint'].classes.has('hidden') === true, 'ready hint should stay hidden');
+  const click = events.documentListeners.find((l) => l.type === 'click' && l.target === ids.restart);
+  click.fn({ preventDefault: () => {} });
+  expect(ids['state-badge'].textContent === 'Ready', 'badge should be Ready again after restart, got ' + ids['state-badge'].textContent);
+  expect(ids['ready-hint'].classes.has('hidden') === false, 'ready hint should return after restart');
+});
+
 check('restart does not run a second loop: the old frame is cancelled', () => {
   const before = events.raf.cancelled.length;
   game.initGame(); // already running from load — restart must cancel the old chain
@@ -368,6 +415,7 @@ check('gameLoop first call is a baseline: no movement, no teleport', () => {
 });
 
 check('gameLoop moves the game proportionally to deltaTime', () => {
+  game.gameState.running = true;
   game.gameState.character.y = 10; // airborne so gravity+position are observable
   game.gameLoop(1000);
   game.gameLoop(1016); // one 60fps frame later
@@ -376,6 +424,7 @@ check('gameLoop moves the game proportionally to deltaTime', () => {
 });
 
 check('gameLoop runs update before render (character div tracks state)', () => {
+  game.gameState.running = true;
   game.gameState.character.y = 10;
   game.gameLoop(1000);
   game.gameLoop(1016);
