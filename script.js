@@ -123,6 +123,7 @@ function handleKeydown(event) {
 }
 
 function jump() {
+  if (!isGrounded()) return;
   gameState.character.velocityY = JUMP_FORCE;
 }
 
@@ -187,6 +188,10 @@ function moveObstacles(deltaTime) {
   gameState.obstacles = gameState.obstacles.filter(
     (obstacle) => obstacle.x + obstacle.width > 0
   );
+}
+
+function isGrounded() {
+  return gameState.character.y <= 0 && gameState.character.velocityY === 0;
 }
 
 function checkCollision() {

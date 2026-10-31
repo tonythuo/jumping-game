@@ -105,7 +105,7 @@ const game = new Function('document', 'window', 'requestAnimationFrame', 'cancel
   initGame, resetGame, resetUI, startRun,
   frameDelta, restartLockoutElapsed,
   gameLoop, handleKeydown, handleSpaceKey, handleEnterKey,
-  jump, update, render, endGame
+  jump, update, render, endGame, isGrounded
 };`)(fakeDocument, fakeWindow, fakeRAF, fakeCAF, { now: () => fakeNow });
 
 const framesOnLoad = events.raf.pending.length;
@@ -308,10 +308,59 @@ check('clearContainer removes every obstacle div', () => {
 // pass once implemented. Run `node tests.js` after each change.
 // ============================================================
 
-check('jump sets velocityY to JUMP_FORCE from any velocity', () => {
+check('jump launches from the ground', () => {
+  game.gameState.character.y = 0;
+  game.gameState.character.velocityY = 0;
+  game.jump();
+  expect(game.gameState.character.velocityY === -12, 'grounded jump should set velocityY to -12, got ' + game.gameState.character.velocityY);
+});
+
+check('jump is ignored while airborne', () => {
+  game.gameState.character.y = 20;
   game.gameState.character.velocityY = 3;
   game.jump();
-  expect(game.gameState.character.velocityY === -12, 'velocityY should be -12, got ' + game.gameState.character.velocityY);
+  expect(game.gameState.character.velocityY === 3, 'falling mid-air: jump must not fire, got ' + game.gameState.character.velocityY);
+  game.gameState.character.velocityY = -5;
+  game.jump();
+  expect(game.gameState.character.velocityY === -5, 'rising mid-air: jump must not re-launch, got ' + game.gameState.character.velocityY);
+});
+
+check('isGrounded is true on the ground and false in flight', () => {
+  game.gameState.character.y = 0;
+  game.gameState.character.velocityY = 0;
+  expect(game.isGrounded() === true, 'standing on the ground should be grounded');
+  game.gameState.character.y = 1;
+  game.gameState.character.velocityY = 0.5;
+  expect(game.isGrounded() === false, 'just lifted off should not be grounded');
+  game.gameState.character.y = 30;
+  game.gameState.character.velocityY = -2;
+  expect(game.isGrounded() === false, 'high in the air should not be grounded');
+});
+
+check('Space mid-air does not re-launch the character', () => {
+  game.initGame(true);
+  let t = 1000;
+  runFrame(t);
+  game.handleKeydown({ code: 'Space', preventDefault: () => {} });
+  for (let i = 0; i < 10; i++) { t += 16; runFrame(t); }
+  const yBefore = game.gameState.character.y;
+  expect(yBefore > 0, 'character should be airborne, got ' + yBefore);
+  game.handleKeydown({ code: 'Space', preventDefault: () => {} });
+  let peak = yBefore;
+  for (let i = 10; i < 80; i++) { t += 16; runFrame(t); peak = Math.max(peak, game.gameState.character.y); }
+  expect(peak <= 144.5, 'peak must match a single jump (~144), got ' + peak.toFixed(1));
+  expect(game.gameState.character.y === 0, 'character should land on the ground');
+  expect(game.gameState.character.velocityY === 0, 'velocity should be zero after landing');
+});
+
+check('restart-Space still jumps because restart lands the character', () => {
+  game.initGame(true);
+  game.gameState.character.y = 40;
+  game.gameState.character.velocityY = 2;
+  game.initGame(true);
+  expect(game.gameState.character.y === 0, 'initGame(true) should ground the character');
+  game.handleKeydown({ code: 'Space', preventDefault: () => {} });
+  expect(game.gameState.character.velocityY === -12, 'restart-Space should jump, got ' + game.gameState.character.velocityY);
 });
 
 check('handleKeydown jumps on space and prevents page scroll', () => {
