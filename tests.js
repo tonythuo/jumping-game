@@ -86,12 +86,16 @@ ids.game.querySelectorAll = () =>
   ids.game.children.filter((c) => c.className === sel.replace('.', ''));
 
 // ============================================================
-// Load script.js (a plain browser script, not a module) and grab
+// Load helpers.js then script.js (same order as index.html, since
+// plain browser scripts share globals only in load order) and grab
 // what the tests need.
 // ============================================================
 const fs = require('fs');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8');
+const src =
+  fs.readFileSync(path.join(__dirname, 'helpers.js'), 'utf8') +
+  '\n' +
+  fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8');
 
 const game = new Function('document', 'window', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance', src + `
 ;return {
@@ -105,7 +109,8 @@ const game = new Function('document', 'window', 'requestAnimationFrame', 'cancel
   initGame, resetGame, resetUI, startRun,
   frameDelta, restartLockoutElapsed,
   gameLoop, handleKeydown, handleSpaceKey, handleEnterKey,
-  jump, update, render, endGame, isGrounded
+  jump, update, render, endGame, isGrounded,
+  isColliding, getRandomNumber
 };`)(fakeDocument, fakeWindow, fakeRAF, fakeCAF, { now: () => fakeNow });
 
 const framesOnLoad = events.raf.pending.length;
@@ -825,6 +830,46 @@ check('removeObstacleDiv deletes only the cached div; updateObstacleDiv paints',
   expect(ids.game.children.length === 1, 'removing an untracked obstacle must not touch other divs');
   game.removeObstacleDiv(ob);
   expect(ids.game.children.length === 0, 'removeObstacleDiv should delete its div');
+});
+
+check('isColliding detects overlap but not exact touching (all four sides)', () => {
+  const r = { x: 50, y: 0, width: 40, height: 40 };
+  expect(game.isColliding(r, { x: 55, y: 0, width: 20, height: 40 }) === true, 'overlapping rects should collide');
+  expect(game.isColliding(r, { x: 90, y: 0, width: 20, height: 40 }) === false, 'touching on the right edge is not a collision');
+  expect(game.isColliding(r, { x: 30, y: 0, width: 20, height: 40 }) === false, 'touching on the left edge is not a collision');
+  expect(game.isColliding(r, { x: 55, y: 40, width: 20, height: 40 }) === false, 'touching on the top edge is not a collision');
+  expect(game.isColliding(r, { x: 55, y: -40, width: 20, height: 40 }) === false, 'touching on the bottom edge is not a collision');
+});
+
+check('getRandomNumber returns integers in range, and floats with float=true', () => {
+  for (let i = 0; i < 100; i++) {
+    const n = game.getRandomNumber(1, 5);
+    expect(Number.isInteger(n) && n >= 1 && n <= 5, 'integer mode: got ' + n);
+  }
+  for (let i = 0; i < 100; i++) {
+    const f = game.getRandomNumber(1, 5, true);
+    expect(f >= 1 && f <= 5, 'float mode: got ' + f);
+  }
+  expect(game.getRandomNumber(3, 3) === 3, 'min === max should return that value');
+});
+
+check('spawnObstacle heights come from getRandomNumber in the 30-60 range', () => {
+  for (let i = 0; i < 50; i++) {
+    game.spawnObstacle();
+    const ob = game.gameState.obstacles.pop();
+    expect(ob.height >= 30 && ob.height <= 60, 'height should be 30-60, got ' + ob.height);
+    expect(ob.x === 600, 'spawned at the right edge');
+  }
+});
+
+check('checkCollision routes through isColliding with identical semantics', () => {
+  withObstacle({ x: 55, y: 0 });
+  expect(game.checkCollision() === true, 'overlap should collide');
+  reset();
+  withObstacle({ x: 90, y: 0 });
+  expect(game.checkCollision() === false, 'exact touching must not collide');
+  reset();
+  expect(game.checkCollision() === false, 'no obstacles means no collision');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
