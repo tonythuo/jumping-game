@@ -1,0 +1,463 @@
+// tests.js — run with: node tests.js
+// Plain-JS tests for the game logic + render functions. No framework.
+
+// ============================================================
+// Minimal fake DOM: script.js grabs elements + calls DOM APIs at
+// top level, so a stub must exist before the source is loaded.
+// ============================================================
+function makeEl(parent) {
+  const el = {
+    style: {},
+    textContent: '',
+    className: '',
+    clientWidth: 600,
+    classes: new Set(['hidden']), // game-over starts hidden in the markup
+    children: [],
+    classList: {
+      add: (c) => el.classes.add(c),
+      remove: (c) => el.classes.delete(c),
+      contains: (c) => el.classes.has(c)
+    },
+    appendChild(child) { child.parent = el; el.children.push(child); },
+    remove() {
+      if (!el.parent) return;
+      const i = el.parent.children.indexOf(el);
+      if (i >= 0) el.parent.children.splice(i, 1);
+      el.parent = null;
+    }
+  };
+  if (parent) el.parent = parent;
+  return el;
+}
+
+const fakeDocument = {
+  getElementById: (id) => ids[id],
+  createElement: () => makeEl(null),
+  addEventListener: (type, fn) => events.documentListeners.push({ type, fn })
+};
+
+const fakeWindow = {
+  addEventListener: (type, fn) => events.windowListeners.push({ type, fn })
+};
+
+// rAF stub: records the callback, never auto-runs it. Tests decide
+// when to fire a frame via runFrame().
+function fakeRAF(cb) {
+  events.raf.pending.push(cb);
+  return events.raf.nextId++;
+}
+
+const ids = {
+  character: makeEl(),
+  score: makeEl(),
+  game: makeEl(),
+  'game-over': makeEl(),
+  'final-score': makeEl(),
+  restart: makeEl()
+};
+
+const events = {
+  raf: { pending: [], nextId: 1 },
+  documentListeners: [],
+  windowListeners: []
+};
+
+// fires one frame of the loop: each pending rAF callback runs once
+function runFrame(timestamp) {
+  const pending = events.raf.pending;
+  events.raf.pending = [];
+  for (const cb of pending) cb(timestamp);
+}
+// clearContainer() queries obstacle divs inside the container
+const sel = '.obstacle';
+ids.game.querySelectorAll = () =>
+  ids.game.children.filter((c) => c.className === sel.replace('.', ''));
+
+// ============================================================
+// Load script.js (a plain browser script, not a module) and grab
+// what the tests need.
+// ============================================================
+const fs = require('fs');
+const path = require('path');
+const src = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8');
+
+const game = new Function('document', 'window', 'requestAnimationFrame', src + `
+;return {
+  gameState,
+  gameEl, characterEl, gameOverEl, finalScoreEl,
+  applyGravity, updateCharacterPosition, spawnObstacle,
+  moveObstacles, checkCollision, updateScore, endGameLogic,
+  renderCharacter, renderObstacles, renderScore, showGameOver, clearContainer,
+  initGame, gameLoop, handleKeydown, jump, update, render, endGame
+};`)(fakeDocument, fakeWindow, fakeRAF);
+
+// ============================================================
+// Tiny harness: PASS/FAIL per test, exit 1 if any fail
+// ============================================================
+let passed = 0, failed = 0;
+function expect(cond, msg) { if (!cond) throw new Error(msg); }
+
+function check(name, fn) {
+  reset();
+  try { fn(); passed++; console.log('PASS  ' + name); }
+  catch (e) { failed++; console.log('FAIL  ' + name + ' — ' + e.message); }
+}
+
+// fresh state before every test (gameState.character is a shared
+// const object, so reset its fields in place)
+function reset() {
+  Object.assign(game.gameState.character, {
+    x: 50, y: 0, velocityY: 0, isJumping: false, isGrounded: true,
+    width: 40, height: 40
+  });
+  game.gameState.obstacles = [];
+  game.gameState.score = 0;
+  game.gameState.gameOver = false;
+  game.gameState.lastSpawnTime = 0;
+  game.gameState.lastTimestamp = 0;
+  events.raf.pending = [];
+  events.documentListeners = [];
+  events.windowListeners = [];
+  ids.game.children = [];
+  ids.character.style = {};
+  ids['game-over'].classes.add('hidden');
+  ids['final-score'].textContent = '';
+}
+
+// helper: push a ready-made obstacle into state
+function withObstacle(props) {
+  const ob = Object.assign({ x: 100, y: 0, width: 20, height: 40, passed: false }, props);
+  game.gameState.obstacles.push(ob);
+  return ob;
+}
+
+// ============================================================
+// SECTION 2 — Logic (character)
+// ============================================================
+check('applyGravity adds GRAVITY to velocityY', () => {
+  game.gameState.character.velocityY = 0;
+  game.applyGravity();
+  expect(game.gameState.character.velocityY === 0.5, 'velocityY should be 0.5, got ' + game.gameState.character.velocityY);
+  game.applyGravity();
+  expect(game.gameState.character.velocityY === 1, 'second call should give 1, got ' + game.gameState.character.velocityY);
+});
+
+check('updateCharacterPosition adds velocityY to y', () => {
+  game.gameState.character.velocityY = 2;
+  game.updateCharacterPosition();
+  expect(game.gameState.character.y === 2, 'y should be 2, got ' + game.gameState.character.y);
+});
+
+check('updateCharacterPosition clamps to ground and zeroes velocity', () => {
+  game.gameState.character.y = 1;
+  game.gameState.character.velocityY = -3; // just about to go below ground
+  game.updateCharacterPosition();
+  expect(game.gameState.character.y === 0, 'y should clamp to 0, got ' + game.gameState.character.y);
+  expect(game.gameState.character.velocityY === 0, 'velocityY should reset to 0, got ' + game.gameState.character.velocityY);
+});
+
+// ============================================================
+// SECTION 2 — Logic (obstacles)
+// ============================================================
+check('spawnObstacle pushes one obstacle at the right edge', () => {
+  game.spawnObstacle();
+  expect(game.gameState.obstacles.length === 1, 'should have 1 obstacle');
+  const ob = game.gameState.obstacles[0];
+  expect(ob.x === 600, 'x should be container width (600), got ' + ob.x);
+  expect(ob.height >= 30 && ob.height <= 60, 'height should be 30-60, got ' + ob.height);
+  expect(ob.passed === false, 'passed should start false');
+});
+
+check('moveObstacles moves by OBSTACLE_SPEED * dt/16', () => {
+  const ob = withObstacle({ x: 100 });
+  game.moveObstacles(16);   // one 60fps frame
+  expect(ob.x === 95, 'at dt=16 x should be 95, got ' + ob.x);
+  game.moveObstacles(32);   // two frames
+  expect(ob.x === 85, 'at cumulative dt=48 x should be 85, got ' + ob.x);
+});
+
+check('moveObstacles handles slow frames proportionally', () => {
+  const ob = withObstacle({ x: 100 });
+  game.moveObstacles(100);  // laggy frame
+  expect(ob.x === 100 - 5 * (100 / 16), 'should move proportionally to dt, got ' + ob.x);
+});
+
+check('moveObstacles removes obstacles fully off the left edge', () => {
+  withObstacle({ x: -25 });
+  game.moveObstacles(0); // x + width = -5 -> gone
+  expect(game.gameState.obstacles.length === 0, 'obstacle at x=-25 should be removed');
+  withObstacle({ x: -19 });
+  game.moveObstacles(0); // x + width = 1 -> still visible
+  expect(game.gameState.obstacles.length === 1, 'obstacle at x=-19 should remain');
+});
+
+// ============================================================
+// SECTION 2 — Logic (collision)
+// ============================================================
+check('checkCollision detects overlap', () => {
+  withObstacle({ x: 55, y: 0 }); // overlaps character horizontally & vertically
+  expect(game.checkCollision() === true, 'overlapping obstacle should collide');
+});
+
+check('checkCollision is false when exactly touching (all four sides)', () => {
+  withObstacle({ x: 90, y: 0 });  // obsLeft = 90 = charRight
+  expect(game.checkCollision() === false, 'touching on character right edge');
+  reset();
+  withObstacle({ x: 30, y: 0 });  // obsRight = 50 = charLeft
+  expect(game.checkCollision() === false, 'touching on character left edge');
+  reset();
+  withObstacle({ x: 55, y: 40 }); // obsBottom = 40 = charTop
+  expect(game.checkCollision() === false, 'touching at character top');
+});
+
+check('checkCollision is false when obstacle overlaps horizontally but is above', () => {
+  withObstacle({ x: 55, y: 45 });
+  expect(game.checkCollision() === false, 'obstacle above character should not collide');
+  expect(game.checkCollision() === false, 'empty obstacles should never collide');
+});
+
+// ============================================================
+// SECTION 2 — Logic (score / game over)
+// ============================================================
+check('updateScore counts an obstacle exactly once, after it fully passes', () => {
+  const char = game.gameState.character;
+  const ob = withObstacle({ x: 25 }); // x + width = 45 < char.x = 50 -> passed
+  game.updateScore();
+  expect(game.gameState.score === 1, 'score should be 1, got ' + game.gameState.score);
+  game.updateScore();
+  expect(game.gameState.score === 1, 'passed flag should stop double counting');
+  ob.passed = false;
+  ob.x = 30; // x + width = 50 == char.x -> not fully passed yet
+  game.updateScore();
+  expect(game.gameState.score === 1, 'should not count until fully past character');
+});
+
+check('endGameLogic sets gameOver to true', () => {
+  game.endGameLogic();
+  expect(game.gameState.gameOver === true, 'gameOver should be true');
+});
+
+// ============================================================
+// SECTION 3 — Render
+// ============================================================
+check('renderCharacter sets left and bottom style', () => {
+  game.renderCharacter({ x: 75, y: 30 });
+  const style = ids.character.style;
+  expect(style.left === '75px', 'left should be 75px, got ' + style.left);
+  expect(style.bottom === '30px', 'bottom should be 30px, got ' + style.bottom);
+});
+
+check('renderObstacles creates one div and does not duplicate it', () => {
+  const ob = { x: 600, y: 0, width: 20, height: 40, passed: false };
+  game.renderObstacles([ob]);
+  game.renderObstacles([ob]); // second frame, same object
+  expect(ids.game.children.length === 1, 'should be exactly 1 obstacle div');
+  expect(ids.game.children[0].style.left === '600px', 'div left should track obstacle x');
+  expect(ids.game.children[0].style.height === '40px', 'div height should track obstacle height');
+  expect(ids.game.children[0].className === 'obstacle', 'div should have class "obstacle"');
+});
+
+check('renderObstacles removes the div once x < -20', () => {
+  const ob = { x: 600, y: 0, width: 20, height: 40, passed: false };
+  game.renderObstacles([ob]);
+  ob.x = -30; // off-screen past the left edge
+  game.renderObstacles([ob]);
+  expect(ids.game.children.length === 0, 'div should be removed from DOM, found ' + ids.game.children.length);
+});
+
+check('renderScore writes "Score: N"', () => {
+  game.renderScore(5);
+  expect(ids.score.textContent === 'Score: 5', 'expected "Score: 5", got "' + ids.score.textContent + '"');
+});
+
+check('showGameOver unhides overlay and sets final score', () => {
+  game.showGameOver(7);
+  expect(ids['game-over'].classes.has('hidden') === false, 'hidden class should be removed');
+  expect(ids['final-score'].textContent === 7, 'final score text should be 7');
+});
+
+check('clearContainer removes every obstacle div', () => {
+  game.renderObstacles([
+    { x: 400, height: 30 },
+    { x: 500, height: 45 }
+  ]);
+  game.clearContainer();
+  expect(ids.game.children.length === 0, 'container should be empty, got ' + ids.game.children.length);
+});
+
+// ============================================================
+// SECTION 1 — KARIM: structure, input & orchestration
+// These are the SPEC: they fail while the stubs are empty and
+// pass once implemented. Run `node tests.js` after each change.
+// ============================================================
+
+check('jump sets velocityY to JUMP_FORCE from any velocity', () => {
+  game.gameState.character.velocityY = 3; // mid-fall
+  game.jump();
+  expect(game.gameState.character.velocityY === -12, 'velocityY should be -12, got ' + game.gameState.character.velocityY);
+});
+
+check('handleKeydown jumps on space and prevents page scroll', () => {
+  let prevented = false;
+  game.handleKeydown({ code: 'Space', preventDefault: () => { prevented = true; } });
+  expect(game.gameState.character.velocityY === -12, 'space should jump, velocityY ' + game.gameState.character.velocityY);
+  expect(prevented === true, 'preventDefault must be called so the page does not scroll');
+});
+
+check('handleKeydown ignores non-space keys', () => {
+  game.handleKeydown({ code: 'KeyA', preventDefault: () => {} });
+  game.handleKeydown({ code: 'ArrowUp', preventDefault: () => {} });
+  expect(game.gameState.character.velocityY === 0, 'non-space keys must not jump');
+});
+
+check('handleKeydown does not stack jump on held key (event.repeat)', () => {
+  game.gameState.character.velocityY = -12; // already jumping
+  game.handleKeydown({ code: 'Space', repeat: true, preventDefault: () => {} });
+  expect(game.gameState.character.velocityY === -12, 'repeat keydown must not re-trigger the jump');
+});
+
+check('initGame resets all state to a fresh game', () => {
+  // dirty every field initGame owns
+  game.gameState.score = 9;
+  game.gameState.obstacles.push({ x: 100, y: 0, width: 20, height: 40, passed: true });
+  game.gameState.gameOver = true;
+  Object.assign(game.gameState.character, { x: 100, y: 100, velocityY: 5 });
+  ids.game.appendChild(Object.assign(makeEl(null), { className: 'obstacle' }));
+
+  game.initGame();
+
+  expect(game.gameState.score === 0, 'score should reset to 0, got ' + game.gameState.score);
+  expect(game.gameState.obstacles.length === 0, 'obstacles should be empty, got ' + game.gameState.obstacles.length);
+  expect(game.gameState.gameOver === false, 'gameOver should be false');
+  expect(game.gameState.character.x === 50, 'character x should reset to 50, got ' + game.gameState.character.x);
+  expect(game.gameState.character.y === 0, 'character y should reset to 0, got ' + game.gameState.character.y);
+  expect(game.gameState.character.velocityY === 0, 'velocityY should reset to 0, got ' + game.gameState.character.velocityY);
+  expect(ids.game.children.length === 0, 'obstacle divs should be cleared from the container');
+  expect(game.gameOverEl.classes.has('hidden') === true, 'game-over overlay should be hidden again');
+});
+
+check('initGame schedules the first frame', () => {
+  game.initGame();
+  expect(events.raf.pending.length === 1, 'requestAnimationFrame should be called once, got ' + events.raf.pending.length);
+});
+
+check('gameLoop first call is a baseline: no movement, no teleport', () => {
+  game.gameLoop(1000);
+  expect(game.gameState.character.y === 0, 'character should stay on ground, got ' + game.gameState.character.y);
+  expect(game.gameState.obstacles.length === 0, 'no obstacle should spawn at t=1000');
+  expect(game.gameState.lastTimestamp === 1000, 'lastTimestamp should be set to 1000, got ' + game.gameState.lastTimestamp);
+});
+
+check('gameLoop moves the game proportionally to deltaTime', () => {
+  game.gameState.character.y = 10; // airborne so gravity+position are observable
+  game.gameLoop(1000);
+  game.gameLoop(1016); // one 60fps frame later
+  expect(game.gameState.character.y === 10.5, 'one 16ms frame of gravity should give y=10.5, got ' + game.gameState.character.y);
+  expect(game.gameState.character.velocityY === 0.5, 'gravity should have applied once, got ' + game.gameState.character.velocityY);
+});
+
+check('gameLoop runs update before render (character div tracks state)', () => {
+  game.gameState.character.y = 10;
+  game.gameLoop(1000);
+  game.gameLoop(1016);
+  expect(ids.character.style.bottom === '10.5px', 'render should have painted the new y, got ' + ids.character.style.bottom);
+});
+
+check('gameLoop schedules the next frame each call', () => {
+  game.gameLoop(1000);
+  expect(events.raf.pending.length === 1, 'one frame scheduled');
+  runFrame(1016);
+  game.gameLoop(1016);
+  expect(events.raf.pending.length === 1, 'next frame scheduled after the previous fired');
+});
+
+check('gameLoop stops scheduling frames once game over', () => {
+  game.gameState.gameOver = true;
+  game.gameLoop(2000);
+  expect(events.raf.pending.length === 0, 'loop must stop on gameOver (no memory leak), got ' + events.raf.pending.length);
+});
+
+check('update applies gravity, position, and obstacle movement in order', () => {
+  game.gameState.character.y = 10;
+  game.update(16, 100);
+  expect(game.gameState.character.y === 10.5, 'one physics step should run, got ' + game.gameState.character.y);
+});
+
+check('update spawns an obstacle only after SPAWN_INTERVAL', () => {
+  game.update(16, 1400); // 1400 - 0 < 1500
+  expect(game.gameState.obstacles.length === 0, 'should not spawn before 1500ms');
+  game.update(16, 1600); // 1600 - 0 > 1500
+  expect(game.gameState.obstacles.length === 1, 'should spawn after 1500ms');
+  game.update(16, 3100); // 3100 - 1600 = 1500, not > 1500
+  expect(game.gameState.obstacles.length === 1, 'exactly at the interval boundary must not spawn');
+  game.update(16, 3200); // 3200 - 1600 = 1600 > 1500
+  expect(game.gameState.obstacles.length === 2, 'next interval should spawn again');
+});
+
+check('update ends the game when the character collides with an obstacle', () => {
+  game.gameState.obstacles.push({ x: 55, y: 0, width: 20, height: 40, passed: false });
+  game.update(16, 100);
+  expect(game.gameState.gameOver === true, 'gameOver should become true on collision');
+  expect(game.gameOverEl.classes.has('hidden') === false, 'game-over overlay should show');
+  expect(String(game.finalScoreEl.textContent) === '0', 'final score should show current score');
+});
+
+check('render paints character, score, and obstacles from state', () => {
+  game.gameState.character.y = 20;
+  game.gameState.score = 4;
+  game.gameState.obstacles.push({ x: 300, y: 0, width: 20, height: 40, passed: false });
+  game.render();
+  expect(ids.character.style.left === '50px', 'character left should be 50px');
+  expect(ids.character.style.bottom === '20px', 'character bottom should be 20px');
+  expect(ids.score.textContent === 'Score: 4', 'score text should update live, got ' + ids.score.textContent);
+  expect(ids.game.children.length === 1, 'one obstacle div should exist');
+});
+
+check('render does not duplicate obstacle divs across frames', () => {
+  game.gameState.obstacles.push({ x: 300, y: 0, width: 20, height: 40, passed: false });
+  game.render();
+  game.render();
+  expect(ids.game.children.length === 1, 'second render should reuse the div, got ' + ids.game.children.length);
+});
+
+check('endGame orchestrates logic + output: gameOver true and overlay shown', () => {
+  game.gameState.score = 3;
+  game.endGame();
+  expect(game.gameState.gameOver === true, 'endGameLogic should set gameOver');
+  expect(game.gameOverEl.classes.has('hidden') === false, 'showGameOver should unhide the overlay');
+  expect(String(game.finalScoreEl.textContent) === '3', 'overlay should show the final score, got ' + game.finalScoreEl.textContent);
+});
+
+check('keydown wiring: spacebar works through the real registered listener', () => {
+  const all = events.documentListeners.concat(events.windowListeners);
+  const keydown = all.find((l) => l.type === 'keydown');
+  if (!keydown) throw new Error('no keydown listener was registered on document or window');
+  keydown.fn({ code: 'Space', preventDefault: () => {} });
+  expect(game.gameState.character.velocityY === -12, 'spacebar through the wiring should jump');
+});
+
+check('restart wiring: clicking restart starts a fresh game', () => {
+  game.gameState.gameOver = true;
+  game.gameState.score = 5;
+  const all = events.documentListeners.concat(events.windowListeners);
+  const click = all.find((l) => l.type === 'click' && l.target === ids.restart);
+  if (!click) throw new Error('no click listener was registered on the #restart button');
+  click.fn({ preventDefault: () => {} });
+  expect(game.gameState.gameOver === false && game.gameState.score === 0, 'restart should reset the game');
+});
+
+check('end-to-end: jump, fly, land, stop — physics wired together', () => {
+  game.initGame();
+  game.handleKeydown({ code: 'Space', preventDefault: () => {} });
+  let t = 1000;
+  for (let i = 0; i < 3; i++) { t += 16; runFrame(t); } // frames fire the loop
+  const peak = game.gameState.character.y;
+  expect(peak > 0, 'character must be airborne after jumping, got y=' + peak);
+  for (let i = 3; i < 20; i++) { t += 16; runFrame(t); }
+  expect(game.gameState.character.y === 0, 'character should land back on ground, got ' + game.gameState.character.y);
+  expect(game.gameState.character.velocityY === 0, 'velocity should be zero after landing, got ' + game.gameState.character.velocityY);
+});
+
+
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exitCode = failed > 0 ? 1 : 0;

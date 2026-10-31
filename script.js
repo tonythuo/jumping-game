@@ -6,8 +6,8 @@
 const player = {
   x: 50,
   y: 0,
-  ContainerWidth: 40,
-  containerHeight: 80,
+  width: 40,
+  height: 40,
   velocityY: 0,
   gravity: 0.5,
   jumpForce: -12,
