@@ -1,4 +1,3 @@
-
 const player = {
   x: 50,
   y: 0,
