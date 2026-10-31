@@ -100,7 +100,12 @@ const game = new Function('document', 'window', 'requestAnimationFrame', 'cancel
   applyGravity, updateCharacterPosition, spawnObstacle,
   moveObstacles, checkCollision, updateScore, endGameLogic,
   renderCharacter, renderObstacles, renderScore, showGameOver, clearContainer,
-  initGame, gameLoop, handleKeydown, jump, update, render, endGame, startRun
+  isOffscreen, removeObstacleDiv, updateObstacleDiv,
+  currentGameState, renderBadge, renderStartScreen,
+  initGame, resetGame, resetUI, startRun,
+  frameDelta, restartLockoutElapsed,
+  gameLoop, handleKeydown, handleSpaceKey, handleEnterKey,
+  jump, update, render, endGame
 };`)(fakeDocument, fakeWindow, fakeRAF, fakeCAF, { now: () => fakeNow });
 
 const framesOnLoad = events.raf.pending.length;
@@ -671,6 +676,106 @@ check('restart moves focus to #game but first load does not', () => {
   expect(events.focusLog.length === 0, 'load should not move focus, got ' + events.focusLog.length);
   game.initGame(true);
   expect(events.focusLog.length === 1 && events.focusLog[0] === ids.game, 'restart should focus #game, got ' + events.focusLog.length);
+});
+
+check('resetGame resets state only; resetUI clears screen only', () => {
+  game.gameState.score = 9;
+  game.gameState.gameOver = true;
+  game.gameState.gameOverAt = 123;
+  game.gameState.running = true;
+  game.gameState.obstacles.push({ x: 300, y: 0, width: 20, height: 40, passed: false });
+  game.gameState.character.y = 25;
+  ids['game-over'].classes.delete('hidden');
+  game.resetGame();
+  expect(game.gameState.score === 0 && game.gameState.gameOver === false, 'resetGame should clear score and gameOver');
+  expect(game.gameState.gameOverAt === 0, 'resetGame should clear gameOverAt');
+  expect(game.gameState.running === false, 'resetGame should leave ready-pause');
+  expect(game.gameState.obstacles.length === 0, 'resetGame should clear obstacles');
+  expect(game.gameState.character.y === 0 && game.gameState.character.velocityY === 0, 'resetGame should reset character');
+  expect(ids['game-over'].classes.has('hidden') === false, 'resetGame must not touch the overlay');
+  ids.game.children = [makeEl(ids.game), makeEl(ids.game)];
+  ids.game.children.forEach((c) => { c.className = 'obstacle'; });
+  game.resetUI();
+  expect(ids['game-over'].classes.has('hidden') === true, 'resetUI should hide the overlay');
+  expect(ids.game.children.length === 0, 'resetUI should clear obstacle divs, got ' + ids.game.children.length);
+  expect(ids['state-badge'].textContent === 'Ready', 'resetUI should render the ready state');
+});
+
+check('frameDelta seeds the clock with 0 and clamps long gaps', () => {
+  game.gameState.lastTimestamp = 0;
+  expect(game.frameDelta(1000) === 0, 'first frame should produce no delta');
+  game.gameState.lastTimestamp = 1000;
+  expect(game.frameDelta(1016) === 16, 'normal frame should give 16');
+  expect(game.frameDelta(5000) === 50, 'long gap should clamp to 50, got ' + game.frameDelta(5000));
+});
+
+check('restartLockoutElapsed flips at exactly RESTART_LOCKOUT_MS', () => {
+  game.gameState.gameOverAt = 1000;
+  fakeNow = 1399;
+  expect(game.restartLockoutElapsed() === false, '1399ms after death should still be locked out');
+  fakeNow = 1400;
+  expect(game.restartLockoutElapsed() === true, 'exactly 400ms after death should be allowed');
+  fakeNow = 1500;
+  expect(game.restartLockoutElapsed() === true, 'past the window should be allowed');
+});
+
+check('handleSpaceKey handles all three states without an event', () => {
+  game.initGame();
+  game.handleSpaceKey();
+  expect(game.gameState.running === true && game.gameState.character.velocityY === -12, 'ready state: start + jump');
+  const y = game.gameState.character.y;
+  game.handleSpaceKey();
+  expect(game.gameState.character.velocityY === -12, 'mid-run: jump again');
+  expect(game.gameState.character.y === y, 'no restart mid-run');
+  fakeNow = 10000;
+  game.gameState.gameOver = true;
+  game.gameState.gameOverAt = 9000;
+  game.gameState.running = false;
+  game.handleSpaceKey();
+  expect(game.gameState.gameOver === false && game.gameState.running === true, 'post-lockout game over: restart');
+  expect(game.gameState.character.velocityY === -12, 'restart-Space jumps');
+});
+
+check('handleEnterKey starts without jumping and restarts when over', () => {
+  game.initGame();
+  game.handleEnterKey();
+  expect(game.gameState.running === true, 'ready state: start');
+  expect(game.gameState.character.velocityY === 0, 'Enter must not jump');
+  game.gameState.gameOver = true;
+  game.handleEnterKey();
+  expect(game.gameState.gameOver === false && game.gameState.running === true, 'game over: restart into run');
+});
+
+check('currentGameState returns over, running, ready in order', () => {
+  game.gameState.gameOver = true;
+  expect(game.currentGameState() === 'over', 'game over wins over running');
+  game.gameState.gameOver = false;
+  game.gameState.running = true;
+  expect(game.currentGameState() === 'running', 'running state');
+  game.gameState.running = false;
+  expect(game.currentGameState() === 'ready', 'ready state');
+});
+
+check('isOffscreen flags obstacles past the left edge', () => {
+  expect(game.isOffscreen({ x: -21, width: 20 }) === true, 'x=-21 should be offscreen');
+  expect(game.isOffscreen({ x: -20, width: 20 }) === false, 'x=-20 should still be on screen');
+  expect(game.isOffscreen({ x: 0, width: 20 }) === false, 'x=0 is on screen');
+});
+
+check('removeObstacleDiv deletes only the cached div; updateObstacleDiv paints', () => {
+  const ob = { x: 300, y: 0, width: 20, height: 40, passed: false };
+  game.updateObstacleDiv(ob);
+  expect(ids.game.children.length === 1, 'updateObstacleDiv should create one div');
+  expect(ids.game.children[0].style.left === '300px', 'div should be painted');
+  ob.x = 280;
+  game.updateObstacleDiv(ob);
+  expect(ids.game.children.length === 1, 'second call should reuse the div');
+  expect(ids.game.children[0].style.left === '280px', 'div should track the new x');
+  const untouched = { x: 100, y: 0, width: 20, height: 40, passed: false };
+  game.removeObstacleDiv(untouched);
+  expect(ids.game.children.length === 1, 'removing an untracked obstacle must not touch other divs');
+  game.removeObstacleDiv(ob);
+  expect(ids.game.children.length === 0, 'removeObstacleDiv should delete its div');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
