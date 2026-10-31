@@ -6,6 +6,7 @@ Project 2 — team jumping game. Team schedule and role assignments live in [`AG
 
 - `index.html` — page structure
 - `style.css` — styles
+- `helpers.js` — shared helper functions (Karim)
 - `script.js` — all game code
 - `tests.js` — test suite, run with `node tests.js`
 
@@ -13,7 +14,7 @@ Project 2 — team jumping game. Team schedule and role assignments live in [`AG
 
 | Person | Section in `script.js` | Owns |
 |---|---|---|
-| Karim | Section 1 | `initGame`, `startRun`, `gameLoop`, `handleKeydown`, `jump`, `update`, `render`, `endGame` — structure, input, orchestration |
+| Karim | Section 1 + `helpers.js` | `initGame`, `startRun`, `gameLoop`, `handleKeydown`, `jump`, `update`, `render`, `endGame` — structure, input, orchestration; `helpers.js` — shared helpers (`isColliding`, `getRandomNumber` are consumed by `script.js`) |
 | Lefa | Section 2 | `applyGravity`, `updateCharacterPosition`, `spawnObstacle`, `moveObstacles`, `checkCollision`, `updateScore`, `endGameLogic` — logic & state |
 | Tony | Section 3 | `renderCharacter`, `renderObstacles`, `renderScore`, `showGameOver`, `renderState`, `clearContainer` — output & feedback |
 

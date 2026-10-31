@@ -176,7 +176,7 @@ function spawnObstacle() {
     x: gameEl.clientWidth,
     y: 0,
     width: 20,
-    height: 30 + Math.random() * 30,
+    height: getRandomNumber(30, 60, true),
     passed: false
   });
 }
@@ -195,20 +195,7 @@ function isGrounded() {
 }
 
 function checkCollision() {
-  const char = gameState.character;
-
-  for (const obstacle of gameState.obstacles) {
-    if (
-      char.x + char.width > obstacle.x &&
-      char.x < obstacle.x + obstacle.width &&
-      char.y + char.height > obstacle.y &&
-      char.y < obstacle.y + obstacle.height
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  return gameState.obstacles.some((obstacle) => isColliding(gameState.character, obstacle));
 }
 
 function updateScore() {

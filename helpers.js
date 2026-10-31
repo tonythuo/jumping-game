@@ -73,6 +73,12 @@ function distanceBetweenRects(rect1, rect2) {
 // =============================================
 
 
+/**
+ * Moves a rectangle in the given direction by the given speed.
+ * @param {{x: number, y: number}} rect - The rectangle to move.
+ * @param {number} speed - How far to move the rectangle.
+ * @param {'up'|'down'|'left'|'right'} direction - The direction to move in.
+ */
 function moveRect(rect, speed, direction) {
     switch (direction) {
         case 'up':
