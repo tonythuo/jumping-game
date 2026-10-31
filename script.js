@@ -1,7 +1,3 @@
-// ============================================================
-// JUMPING GAME — interface contract (agreed, do not rename)
-// Sections below: Karim (input/orchestration), Logic (state), Tony (output)
-// ============================================================
 
 const player = {
   x: 50,
@@ -29,9 +25,7 @@ const SPAWN_INTERVAL = 1500;
 const RESTART_LOCKOUT_MS = 400;
 const MAX_FRAME_DT = 50;
 
-// ============================================================
-// SECTION 1 — KARIM: Structure, Input & Orchestration
-// ============================================================
+
 
 let frameId = 0;
 
@@ -154,9 +148,7 @@ function endGame(timestamp = performance.now()) {
   gameOverEl.focus();
 }
 
-// ============================================================
-// SECTION 2 — Lefa: Logic & State
-// ============================================================
+
 
 function applyGravity() {
   gameState.character.velocityY += GRAVITY;
@@ -226,9 +218,7 @@ function endGameLogic() {
   gameState.gameOver = true;
 }
 
-// ============================================================
-// SECTION 3 — TONY: Output & Feedback
-// ============================================================
+
 
 const characterEl = document.getElementById('character');
 const scoreEl = document.getElementById('score');
