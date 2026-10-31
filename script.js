@@ -33,11 +33,13 @@ const obstacle = {
   init(){}
 };
 // --- CONTRACT: shared state + constants (edit only with team sign-off) ---
+// NOTE: `running` added Oct 31 — ready-pause until first Space. Sign-off pending.
 const gameState = {
   character: player,
   obstacles: [],
   score: 0,
   gameOver: false,
+  running: false, // false = ready-pause on load/restart, true = run in progress
   lastSpawnTime: 0,
   lastTimestamp: 0
 };
@@ -57,11 +59,13 @@ function initGame() {
   gameState.score = 0;
   gameState.obstacles = [];
   gameState.gameOver = false;
+  gameState.running = false; // ready-pause: first Space starts the run
   gameState.lastSpawnTime = 0;
   gameState.lastTimestamp = 0;
   Object.assign(gameState.character, { x: 50, y: 0, velocityY: 0 });
   clearContainer();
   gameOverEl.classList.add('hidden');
+  renderState();
   if (frameId) cancelAnimationFrame(frameId); // no double loop on restart
   frameId = requestAnimationFrame(gameLoop);
 }
@@ -73,11 +77,14 @@ function gameLoop(timestamp) {
   if (gameState.lastTimestamp === 0) {
     // first frame after (re)start: seed the clock only, no delta yet
     gameState.lastTimestamp = timestamp;
-  } else {
+  } else if (gameState.running) {
     const deltaTime = timestamp - gameState.lastTimestamp;
     gameState.lastTimestamp = timestamp;
     update(deltaTime, timestamp);
     render();
+  } else {
+    // ready-pause: world frozen, loop ticks so the first Space is instant
+    gameState.lastTimestamp = timestamp;
   }
   frameId = requestAnimationFrame(gameLoop);
 }
@@ -86,6 +93,7 @@ function gameLoop(timestamp) {
 function handleKeydown(event) {
   if (event.code !== 'Space' || event.repeat) return;
   event.preventDefault(); // keep space from scrolling the page
+  if (!gameState.running) gameState.running = true; // first Space starts the run
   jump();
 }
 
@@ -112,12 +120,14 @@ function render() {
   renderCharacter(gameState.character);
   renderScore(gameState.score);
   renderObstacles(gameState.obstacles);
+  renderState();
 }
 
 // orchestrator — calls endGameLogic() + showGameOver()
 function endGame() {
   endGameLogic();
   showGameOver(gameState.score);
+  renderState();
 }
 
 // ============================================================
@@ -219,6 +229,8 @@ const scoreEl = document.getElementById('score');
 const gameEl = document.getElementById('game');
 const gameOverEl = document.getElementById('game-over');
 const finalScoreEl = document.getElementById('final-score');
+const stateBadgeEl = document.getElementById('state-badge');
+const readyHintEl = document.getElementById('ready-hint');
 
 const obstacleEls = new WeakMap(); // obstacle object -> its div
 
@@ -260,6 +272,14 @@ function renderScore(score) {
 function showGameOver(finalScore) {
   gameOverEl.classList.remove('hidden');
   finalScoreEl.textContent = finalScore;
+}
+
+// badge + ready hint mirror gameState (called from render and endGame)
+function renderState() {
+  const state = gameState.gameOver ? 'over' : gameState.running ? 'running' : 'ready';
+  stateBadgeEl.textContent = { over: 'Game over', running: 'Running', ready: 'Ready' }[state];
+  stateBadgeEl.className = 'preview-badge state-' + state;
+  readyHintEl.classList.toggle('hidden', state !== 'ready');
 }
 
 // removes all obstacle divs from DOM
