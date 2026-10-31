@@ -331,15 +331,14 @@ check('jump is ignored while airborne', () => {
 });
 
 check('isGrounded is true on the ground and false in flight', () => {
-  game.gameState.character.y = 0;
-  game.gameState.character.velocityY = 0;
-  expect(game.isGrounded() === true, 'standing on the ground should be grounded');
-  game.gameState.character.y = 1;
-  game.gameState.character.velocityY = 0.5;
-  expect(game.isGrounded() === false, 'just lifted off should not be grounded');
-  game.gameState.character.y = 30;
-  game.gameState.character.velocityY = -2;
-  expect(game.isGrounded() === false, 'high in the air should not be grounded');
+  const char = game.gameState.character;
+  char.y = 0; char.velocityY = 0;
+  expect(game.isGrounded(char) === true, 'standing on the ground should be grounded');
+  char.y = 1; char.velocityY = 0.5;
+  expect(game.isGrounded(char) === false, 'just lifted off should not be grounded');
+  char.y = 30; char.velocityY = -2;
+  expect(game.isGrounded(char) === false, 'high in the air should not be grounded');
+  expect(game.isGrounded({ y: 0, velocityY: 0 }) === true, 'works on plain objects (no global state)');
 });
 
 check('Space mid-air does not re-launch the character', () => {
@@ -801,13 +800,14 @@ check('handleEnterKey starts without jumping and restarts when over', () => {
 });
 
 check('currentGameState returns over, running, ready in order', () => {
-  game.gameState.gameOver = true;
-  expect(game.currentGameState() === 'over', 'game over wins over running');
-  game.gameState.gameOver = false;
-  game.gameState.running = true;
-  expect(game.currentGameState() === 'running', 'running state');
-  game.gameState.running = false;
-  expect(game.currentGameState() === 'ready', 'ready state');
+  const state = game.gameState;
+  state.gameOver = true; state.running = true;
+  expect(game.currentGameState(state) === 'over', 'game over wins over running');
+  state.gameOver = false;
+  expect(game.currentGameState(state) === 'running', 'running state');
+  state.running = false;
+  expect(game.currentGameState(state) === 'ready', 'ready state');
+  expect(game.currentGameState({ gameOver: false, running: true }) === 'running', 'works on plain objects (no global state)');
 });
 
 check('isOffscreen flags obstacles past the left edge', () => {
