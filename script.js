@@ -89,7 +89,7 @@ function gameLoop(timestamp) {
   frameId = requestAnimationFrame(gameLoop);
 }
 
-// calls jump() on spacebar
+// calls jump() on spacebar; Enter restarts when game over
 function handleKeydown(event) {
   if (event.code !== 'Space' || event.repeat) return;
   event.preventDefault(); // keep space from scrolling the page

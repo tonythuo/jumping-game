@@ -83,6 +83,7 @@ kbd { padding: 4px 12px; border: 1px solid #cdd2c5; border-bottom-width: 3px; bo
 #restart { display: flex; align-items: center; gap: 28px; border: 0; border-radius: 8px; padding: 13px 20px; background: var(--ink); color: white; cursor: pointer; font-weight: 600; }
 #restart:hover { background: #395743; }
 #restart span { color: var(--accent); }
+.restart-hint { margin-top: -8px; font-size: 12px; color: var(--muted); }
 :focus-visible { outline: 3px solid #526e30; outline-offset: 4px; }
 #game:focus-visible { outline-offset: -4px; }
 

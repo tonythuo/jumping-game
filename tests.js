@@ -513,6 +513,36 @@ check('restart wiring: clicking restart starts a fresh game', () => {
   expect(game.gameState.gameOver === false && game.gameState.score === 0, 'restart should reset the game');
 });
 
+check('Enter restarts the game when game over', () => {
+  game.gameState.gameOver = true;
+  game.gameState.score = 7;
+  game.gameState.obstacles.push({ x: 100, y: 0, width: 20, height: 40, passed: false });
+  let prevented = false;
+  game.handleKeydown({ code: 'Enter', preventDefault: () => { prevented = true; } });
+  expect(prevented === true, 'Enter should preventDefault (button focus would double-fire)');
+  expect(game.gameState.gameOver === false, 'Enter should restart when game over');
+  expect(game.gameState.score === 0, 'score should reset, got ' + game.gameState.score);
+  expect(game.gameState.obstacles.length === 0, 'obstacles should clear');
+  expect(game.gameState.character.y === 0 && game.gameState.character.velocityY === 0, 'character should reset');
+  expect(events.raf.cancelled.length > 0, 'the old loop should be cancelled, not doubled');
+});
+
+check('NumpadEnter also restarts when game over', () => {
+  game.gameState.gameOver = true;
+  game.handleKeydown({ code: 'NumpadEnter', preventDefault: () => {} });
+  expect(game.gameState.gameOver === false, 'NumpadEnter should restart');
+});
+
+check('Enter is a no-op while the game is running', () => {
+  game.gameState.gameOver = false;
+  game.gameState.score = 3;
+  game.gameState.obstacles.push({ x: 300, y: 0, width: 20, height: 40, passed: false });
+  game.handleKeydown({ code: 'Enter', preventDefault: () => {} });
+  expect(game.gameState.gameOver === false, 'game should keep running');
+  expect(game.gameState.score === 3, 'score must not reset mid-run');
+  expect(game.gameState.obstacles.length === 1, 'obstacles must not clear mid-run');
+});
+
 check('end-to-end: jump, fly, land, stop — physics wired together', () => {
   game.initGame();
   game.handleKeydown({ code: 'Space', preventDefault: () => {} });
