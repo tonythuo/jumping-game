@@ -11,7 +11,7 @@ function makeEl(parent) {
     textContent: '',
     className: '',
     clientWidth: 600,
-    classes: new Set(['hidden']), // game-over starts hidden in the markup
+    classes: new Set(['hidden']),
     children: [],
     classList: {
       add: (c) => el.classes.add(c),
@@ -24,6 +24,7 @@ function makeEl(parent) {
     },
     appendChild(child) { child.parent = el; el.children.push(child); },
     addEventListener(type, fn) { events.documentListeners.push({ type, fn, target: el }); },
+    focus() { events.focusLog.push(el); },
     remove() {
       if (!el.parent) return;
       const i = el.parent.children.indexOf(el);
@@ -45,8 +46,6 @@ const fakeWindow = {
   addEventListener: (type, fn) => events.windowListeners.push({ type, fn })
 };
 
-// rAF stub: records the callback, never auto-runs it. Tests decide
-// when to fire a frame via runFrame().
 function fakeRAF(cb) {
   events.raf.pending.push(cb);
   return events.raf.nextId++;
@@ -71,19 +70,17 @@ const ids = {
 const events = {
   raf: { pending: [], nextId: 1, cancelled: [] },
   documentListeners: [],
-  windowListeners: []
+  windowListeners: [],
+  focusLog: []
 };
 
-// fires one frame of the loop: each pending rAF callback runs once
 function runFrame(timestamp) {
   const pending = events.raf.pending;
   events.raf.pending = [];
   for (const cb of pending) cb(timestamp);
 }
 
-// controllable wall clock for the restart-lockout (script.js uses performance.now())
 let fakeNow = 0;
-// clearContainer() queries obstacle divs inside the container
 const sel = '.obstacle';
 ids.game.querySelectorAll = () =>
   ids.game.children.filter((c) => c.className === sel.replace('.', ''));
@@ -106,7 +103,6 @@ const game = new Function('document', 'window', 'requestAnimationFrame', 'cancel
   initGame, gameLoop, handleKeydown, jump, update, render, endGame, startRun
 };`)(fakeDocument, fakeWindow, fakeRAF, fakeCAF, { now: () => fakeNow });
 
-// frames scheduled at script load — captured before any check() resets state
 const framesOnLoad = events.raf.pending.length;
 
 // ============================================================
@@ -121,29 +117,25 @@ function check(name, fn) {
   catch (e) { failed++; console.log('FAIL  ' + name + ' — ' + e.message); }
 }
 
-// fresh state before every test (gameState.character is a shared
-// const object, so reset its fields in place)
 function reset() {
   Object.assign(game.gameState.character, {
-    x: 50, y: 0, velocityY: 0, isJumping: false, isGrounded: true,
-    width: 40, height: 40
+    x: 50, y: 0, velocityY: 0, width: 40, height: 40
   });
   game.gameState.obstacles = [];
   game.gameState.score = 0;
   game.gameState.gameOver = false;
-  game.gameState.running = false; // load state: ready-pause
+  game.gameState.gameOverAt = 0;
+  game.gameState.running = false;
   game.gameState.lastSpawnTime = 0;
   game.gameState.lastTimestamp = 0;
   events.raf.pending = [];
-  // NOTE: listener arrays are NOT cleared — wiring is registered once at
-  // script load and the wiring tests must still find it
+  events.focusLog = [];
   ids.game.children = [];
   ids.character.style = {};
   ids['game-over'].classes.add('hidden');
   ids['final-score'].textContent = '';
 }
 
-// helper: push a ready-made obstacle into state
 function withObstacle(props) {
   const ob = Object.assign({ x: 100, y: 0, width: 20, height: 40, passed: false }, props);
   game.gameState.obstacles.push(ob);
@@ -163,14 +155,14 @@ check('applyGravity adds GRAVITY to velocityY', () => {
 
 check('updateCharacterPosition moves y against velocityY (falling lowers y)', () => {
   game.gameState.character.y = 10;
-  game.gameState.character.velocityY = 2; // falling
+  game.gameState.character.velocityY = 2;
   game.updateCharacterPosition();
   expect(game.gameState.character.y === 8, 'falling should lower y to 8, got ' + game.gameState.character.y);
 });
 
 check('updateCharacterPosition clamps to ground and zeroes velocity', () => {
   game.gameState.character.y = 1;
-  game.gameState.character.velocityY = 3; // falling fast enough to go below ground
+  game.gameState.character.velocityY = 3;
   game.updateCharacterPosition();
   expect(game.gameState.character.y === 0, 'y should clamp to 0, got ' + game.gameState.character.y);
   expect(game.gameState.character.velocityY === 0, 'velocityY should reset to 0, got ' + game.gameState.character.velocityY);
@@ -190,24 +182,24 @@ check('spawnObstacle pushes one obstacle at the right edge', () => {
 
 check('moveObstacles moves by OBSTACLE_SPEED * dt/16', () => {
   const ob = withObstacle({ x: 100 });
-  game.moveObstacles(16);   // one 60fps frame
+  game.moveObstacles(16);
   expect(ob.x === 95, 'at dt=16 x should be 95, got ' + ob.x);
-  game.moveObstacles(32);   // two frames
+  game.moveObstacles(32);
   expect(ob.x === 85, 'at cumulative dt=48 x should be 85, got ' + ob.x);
 });
 
 check('moveObstacles handles slow frames proportionally', () => {
   const ob = withObstacle({ x: 100 });
-  game.moveObstacles(100);  // laggy frame
+  game.moveObstacles(100);
   expect(ob.x === 100 - 5 * (100 / 16), 'should move proportionally to dt, got ' + ob.x);
 });
 
 check('moveObstacles removes obstacles fully off the left edge', () => {
   withObstacle({ x: -25 });
-  game.moveObstacles(0); // x + width = -5 -> gone
+  game.moveObstacles(0);
   expect(game.gameState.obstacles.length === 0, 'obstacle at x=-25 should be removed');
   withObstacle({ x: -19 });
-  game.moveObstacles(0); // x + width = 1 -> still visible
+  game.moveObstacles(0);
   expect(game.gameState.obstacles.length === 1, 'obstacle at x=-19 should remain');
 });
 
@@ -215,18 +207,18 @@ check('moveObstacles removes obstacles fully off the left edge', () => {
 // SECTION 2 — Logic (collision)
 // ============================================================
 check('checkCollision detects overlap', () => {
-  withObstacle({ x: 55, y: 0 }); // overlaps character horizontally & vertically
+  withObstacle({ x: 55, y: 0 });
   expect(game.checkCollision() === true, 'overlapping obstacle should collide');
 });
 
 check('checkCollision is false when exactly touching (all four sides)', () => {
-  withObstacle({ x: 90, y: 0 });  // obsLeft = 90 = charRight
+  withObstacle({ x: 90, y: 0 });
   expect(game.checkCollision() === false, 'touching on character right edge');
   reset();
-  withObstacle({ x: 30, y: 0 });  // obsRight = 50 = charLeft
+  withObstacle({ x: 30, y: 0 });
   expect(game.checkCollision() === false, 'touching on character left edge');
   reset();
-  withObstacle({ x: 55, y: 40 }); // obsBottom = 40 = charTop
+  withObstacle({ x: 55, y: 40 });
   expect(game.checkCollision() === false, 'touching at character top');
 });
 
@@ -241,13 +233,13 @@ check('checkCollision is false when obstacle overlaps horizontally but is above'
 // ============================================================
 check('updateScore counts an obstacle exactly once, after it fully passes', () => {
   const char = game.gameState.character;
-  const ob = withObstacle({ x: 25 }); // x + width = 45 < char.x = 50 -> passed
+  const ob = withObstacle({ x: 25 });
   game.updateScore();
   expect(game.gameState.score === 1, 'score should be 1, got ' + game.gameState.score);
   game.updateScore();
   expect(game.gameState.score === 1, 'passed flag should stop double counting');
   ob.passed = false;
-  ob.x = 30; // x + width = 50 == char.x -> not fully passed yet
+  ob.x = 30;
   game.updateScore();
   expect(game.gameState.score === 1, 'should not count until fully past character');
 });
@@ -270,7 +262,7 @@ check('renderCharacter sets left and bottom style', () => {
 check('renderObstacles creates one div and does not duplicate it', () => {
   const ob = { x: 600, y: 0, width: 20, height: 40, passed: false };
   game.renderObstacles([ob]);
-  game.renderObstacles([ob]); // second frame, same object
+  game.renderObstacles([ob]);
   expect(ids.game.children.length === 1, 'should be exactly 1 obstacle div');
   expect(ids.game.children[0].style.left === '600px', 'div left should track obstacle x');
   expect(ids.game.children[0].style.height === '40px', 'div height should track obstacle height');
@@ -280,7 +272,7 @@ check('renderObstacles creates one div and does not duplicate it', () => {
 check('renderObstacles removes the div once x < -20', () => {
   const ob = { x: 600, y: 0, width: 20, height: 40, passed: false };
   game.renderObstacles([ob]);
-  ob.x = -30; // off-screen past the left edge
+  ob.x = -30;
   game.renderObstacles([ob]);
   expect(ids.game.children.length === 0, 'div should be removed from DOM, found ' + ids.game.children.length);
 });
@@ -312,7 +304,7 @@ check('clearContainer removes every obstacle div', () => {
 // ============================================================
 
 check('jump sets velocityY to JUMP_FORCE from any velocity', () => {
-  game.gameState.character.velocityY = 3; // mid-fall
+  game.gameState.character.velocityY = 3;
   game.jump();
   expect(game.gameState.character.velocityY === -12, 'velocityY should be -12, got ' + game.gameState.character.velocityY);
 });
@@ -331,13 +323,12 @@ check('handleKeydown ignores non-space keys', () => {
 });
 
 check('handleKeydown does not stack jump on held key (event.repeat)', () => {
-  game.gameState.character.velocityY = -12; // already jumping
+  game.gameState.character.velocityY = -12;
   game.handleKeydown({ code: 'Space', repeat: true, preventDefault: () => {} });
   expect(game.gameState.character.velocityY === -12, 'repeat keydown must not re-trigger the jump');
 });
 
 check('initGame resets all state to a fresh game', () => {
-  // dirty every field initGame owns
   game.gameState.score = 9;
   game.gameState.obstacles.push({ x: 100, y: 0, width: 20, height: 40, passed: true });
   game.gameState.gameOver = true;
@@ -366,12 +357,12 @@ check('game auto-starts: a frame is scheduled when the script loads', () => {
 });
 
 check('ready-pause on load: start screen shows, world frozen until first Space', () => {
-  game.initGame(); // what the script does on page load
+  game.initGame();
   expect(ids['state-badge'].textContent === 'Ready', 'badge should say Ready, got ' + ids['state-badge'].textContent);
   expect(ids['start-screen'].classes.has('hidden') === false, 'start screen should be visible on load');
   let t = 1000;
   game.gameLoop(t);
-  for (let i = 0; i < 124; i++) { t += 16; runFrame(t); } // ~2s of frames
+  for (let i = 0; i < 124; i++) { t += 16; runFrame(t); }
   expect(game.gameState.obstacles.length === 0, 'nothing should spawn while paused');
   expect(game.gameState.character.y === 0, 'character should stay on the ground');
   expect(game.gameState.score === 0, 'score should stay 0');
@@ -381,9 +372,9 @@ check('ready-pause on load: start screen shows, world frozen until first Space',
 check('first Space starts the run: start screen hides, badge flips to Running', () => {
   game.initGame();
   let t = 1000;
-  runFrame(t); // first frame: seeds the clock
+  runFrame(t);
   game.handleKeydown({ code: 'Space', preventDefault: () => {} });
-  t += 16; runFrame(t); // frame after the press: update + render
+  t += 16; runFrame(t);
   expect(ids['state-badge'].textContent === 'Running', 'badge should say Running, got ' + ids['state-badge'].textContent);
   expect(ids['start-screen'].classes.has('hidden') === true, 'start screen should hide once running');
   expect(game.gameState.character.y > 0, 'character should be airborne, got ' + game.gameState.character.y);
@@ -409,7 +400,7 @@ check('collision shows Game over badge; restart returns to Ready', () => {
   game.handleKeydown({ code: 'Space', preventDefault: () => {} });
   t += 16; runFrame(t);
   game.gameState.obstacles.push({ x: 55, y: 0, width: 20, height: 40, passed: false });
-  t += 16; runFrame(t); // frame that collides
+  t += 16; runFrame(t);
   expect(ids['state-badge'].textContent === 'Game over', 'badge should say Game over, got ' + ids['state-badge'].textContent);
   expect(ids['start-screen'].classes.has('hidden') === true, 'start screen should stay hidden');
   const click = events.documentListeners.find((l) => l.type === 'click' && l.target === ids.restart);
@@ -432,7 +423,7 @@ check('initGame(true) restarts straight into the run with no start screen', () =
 
 check('restart does not run a second loop: the old frame is cancelled', () => {
   const before = events.raf.cancelled.length;
-  game.initGame(); // already running from load — restart must cancel the old chain
+  game.initGame();
   expect(events.raf.cancelled.length === before + 1, 'the in-flight frame should be cancelled, got ' + (events.raf.cancelled.length - before) + ' cancels');
 });
 
@@ -445,9 +436,9 @@ check('gameLoop first call is a baseline: no movement, no teleport', () => {
 
 check('gameLoop moves the game proportionally to deltaTime', () => {
   game.gameState.running = true;
-  game.gameState.character.y = 10; // airborne so gravity+position are observable
+  game.gameState.character.y = 10;
   game.gameLoop(1000);
-  game.gameLoop(1016); // one 60fps frame later
+  game.gameLoop(1016);
   expect(game.gameState.character.y === 9.5, 'one 16ms frame of gravity should give y=9.5, got ' + game.gameState.character.y);
   expect(game.gameState.character.velocityY === 0.5, 'gravity should have applied once, got ' + game.gameState.character.velocityY);
 });
@@ -463,7 +454,7 @@ check('gameLoop runs update before render (character div tracks state)', () => {
 check('gameLoop schedules the next frame each call', () => {
   game.gameLoop(1000);
   expect(events.raf.pending.length === 1, 'one frame scheduled');
-  runFrame(1016); // fires the scheduled frame, which must schedule the next
+  runFrame(1016);
   expect(events.raf.pending.length === 1, 'next frame scheduled after the previous fired');
 });
 
@@ -480,13 +471,13 @@ check('update applies gravity, position, and obstacle movement in order', () => 
 });
 
 check('update spawns an obstacle only after SPAWN_INTERVAL', () => {
-  game.update(16, 1400); // 1400 - 0 < 1500
+  game.update(16, 1400);
   expect(game.gameState.obstacles.length === 0, 'should not spawn before 1500ms');
-  game.update(16, 1600); // 1600 - 0 > 1500
+  game.update(16, 1600);
   expect(game.gameState.obstacles.length === 1, 'should spawn after 1500ms');
-  game.update(16, 3100); // 3100 - 1600 = 1500, not > 1500
+  game.update(16, 3100);
   expect(game.gameState.obstacles.length === 1, 'exactly at the interval boundary must not spawn');
-  game.update(16, 3200); // 3200 - 1600 = 1600 > 1500
+  game.update(16, 3200);
   expect(game.gameState.obstacles.length === 2, 'next interval should spawn again');
 });
 
@@ -583,7 +574,7 @@ check('collision records gameOverAt from the frame timestamp', () => {
 check('Space during the restart lockout does nothing', () => {
   fakeNow = 5000;
   game.gameState.gameOver = true;
-  game.gameState.gameOverAt = 4800; // 200ms ago — inside the 400ms window
+  game.gameState.gameOverAt = 4800;
   game.gameState.score = 12;
   game.gameState.obstacles.push({ x: 150, y: 0, width: 20, height: 40, passed: false });
   const cancels = events.raf.cancelled.length;
@@ -598,7 +589,7 @@ check('Space during the restart lockout does nothing', () => {
 check('Space after the lockout restarts into the run and jumps', () => {
   fakeNow = 5400;
   game.gameState.gameOver = true;
-  game.gameState.gameOverAt = 4800; // 600ms ago — past the window
+  game.gameState.gameOverAt = 4800;
   game.gameState.score = 9;
   const cancels = events.raf.cancelled.length;
   game.handleKeydown({ code: 'Space', preventDefault: () => {} });
@@ -613,14 +604,14 @@ check('Space after the lockout restarts into the run and jumps', () => {
 check('Enter restarts immediately even inside the lockout window', () => {
   fakeNow = 5000;
   game.gameState.gameOver = true;
-  game.gameState.gameOverAt = 4990; // 10ms ago — deep inside the window
+  game.gameState.gameOverAt = 4990;
   game.handleKeydown({ code: 'Enter', preventDefault: () => {} });
   expect(game.gameState.gameOver === false, 'Enter should bypass the lockout');
   expect(game.gameState.running === true, 'Enter restart should run immediately');
 });
 
 check('Enter on the start screen starts the run without jumping', () => {
-  game.initGame(); // ready-pause, start screen showing
+  game.initGame();
   expect(ids['start-screen'].classes.has('hidden') === false, 'start screen should be visible before Enter');
   let prevented = false;
   game.handleKeydown({ code: 'Enter', preventDefault: () => { prevented = true; } });
@@ -643,14 +634,44 @@ check('end-to-end: jump, fly, land, stop — physics wired together', () => {
   game.initGame();
   game.handleKeydown({ code: 'Space', preventDefault: () => {} });
   let t = 1000;
-  for (let i = 0; i < 15; i++) { t += 16; runFrame(t); } // frames fire the loop
+  for (let i = 0; i < 15; i++) { t += 16; runFrame(t); }
   const peak = game.gameState.character.y;
   expect(peak > 0, 'character must be airborne after jumping, got y=' + peak);
-  for (let i = 15; i < 65; i++) { t += 16; runFrame(t); } // jump takes ~48 frames to land
+  for (let i = 15; i < 65; i++) { t += 16; runFrame(t); }
   expect(game.gameState.character.y === 0, 'character should land back on ground, got ' + game.gameState.character.y);
   expect(game.gameState.character.velocityY === 0, 'velocity should be zero after landing, got ' + game.gameState.character.velocityY);
 });
 
+check('gameLoop clamps deltaTime after long gaps (background tab)', () => {
+  game.gameState.running = true;
+  game.gameState.character.y = 100;
+  game.gameState.lastTimestamp = 1000;
+  game.gameLoop(4000);
+  expect(game.gameState.character.velocityY === 0.5, 'one clamped step of gravity, got ' + game.gameState.character.velocityY);
+  expect(game.gameState.character.y === 99.5, 'position should move one 50ms step, got ' + game.gameState.character.y);
+  expect(game.gameState.lastTimestamp === 4000, 'clock should still advance to the real time, got ' + game.gameState.lastTimestamp);
+});
+
+check('collision moves focus to the game-over dialog', () => {
+  game.gameState.score = 2;
+  game.endGame(1000);
+  expect(events.focusLog[events.focusLog.length - 1] === ids['game-over'], 'game-over should receive focus, got ' + events.focusLog.length + ' focus calls');
+});
+
+check('startRun moves focus to #game', () => {
+  game.initGame();
+  events.focusLog = [];
+  game.startRun();
+  expect(events.focusLog.length === 1 && events.focusLog[0] === ids.game, 'the game area should receive focus after start, got ' + events.focusLog.length);
+});
+
+check('restart moves focus to #game but first load does not', () => {
+  events.focusLog = [];
+  game.initGame();
+  expect(events.focusLog.length === 0, 'load should not move focus, got ' + events.focusLog.length);
+  game.initGame(true);
+  expect(events.focusLog.length === 1 && events.focusLog[0] === ids.game, 'restart should focus #game, got ' + events.focusLog.length);
+});
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exitCode = failed > 0 ? 1 : 0;
