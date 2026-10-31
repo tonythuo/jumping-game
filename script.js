@@ -24,10 +24,7 @@ const SPAWN_INTERVAL = 1500;
 const RESTART_LOCKOUT_MS = 400;
 const MAX_FRAME_DT = 50;
 
-
-
 let frameId = 0;
-
 
 function resetGame() {
   gameState.score = 0;
@@ -40,13 +37,11 @@ function resetGame() {
   Object.assign(gameState.character, { x: 50, y: 0, velocityY: 0 });
 }
 
-
 function resetUI() {
   clearContainer();
   gameOverEl.classList.add('hidden');
   renderState();
 }
-
 
 function initGame(autoStart = false) {
   resetGame();
@@ -59,7 +54,6 @@ function initGame(autoStart = false) {
   frameId = requestAnimationFrame(gameLoop);
 }
 
-
 function startRun() {
   if (gameState.running || gameState.gameOver) return;
   gameState.running = true;
@@ -67,12 +61,10 @@ function startRun() {
   gameEl.focus();
 }
 
-
 function frameDelta(timestamp) {
   if (gameState.lastTimestamp === 0) return 0;
   return Math.min(timestamp - gameState.lastTimestamp, MAX_FRAME_DT);
 }
-
 
 function gameLoop(timestamp) {
   if (gameState.gameOver) return;
@@ -86,11 +78,9 @@ function gameLoop(timestamp) {
   frameId = requestAnimationFrame(gameLoop);
 }
 
-
 function restartLockoutElapsed() {
   return performance.now() - gameState.gameOverAt >= RESTART_LOCKOUT_MS;
 }
-
 
 function handleSpaceKey() {
   if (gameState.gameOver) {
@@ -104,7 +94,6 @@ function handleSpaceKey() {
   jump();
 }
 
-
 function handleEnterKey() {
   if (gameState.gameOver) {
     initGame(true);
@@ -112,7 +101,6 @@ function handleEnterKey() {
     startRun();
   }
 }
-
 
 function handleKeydown(event) {
   if (event.repeat) return;
@@ -125,12 +113,10 @@ function handleKeydown(event) {
   }
 }
 
-
 function jump() {
   if (!isGrounded(gameState.character)) return;
   gameState.character.velocityY = JUMP_FORCE;
 }
-
 
 function update(deltaTime, timestamp) {
   applyGravity();
@@ -144,14 +130,12 @@ function update(deltaTime, timestamp) {
   if (checkCollision()) endGame(timestamp);
 }
 
-
 function render() {
   renderCharacter(gameState.character);
   renderScore(gameState.score);
   renderObstacles(gameState.obstacles);
   renderState();
 }
-
 
 function endGame(timestamp = performance.now()) {
   endGameLogic();
@@ -161,13 +145,9 @@ function endGame(timestamp = performance.now()) {
   gameOverEl.focus();
 }
 
-
-
-
 function applyGravity() {
   gameState.character.velocityY += GRAVITY;
 }
-
 
 function updateCharacterPosition() {
   gameState.character.y -= gameState.character.velocityY;
@@ -177,7 +157,6 @@ function updateCharacterPosition() {
     gameState.character.velocityY = 0;
   }
 }
-
 
 function spawnObstacle() {
   gameState.obstacles.push({
@@ -189,7 +168,6 @@ function spawnObstacle() {
   });
 }
 
-
 function moveObstacles(deltaTime) {
   for (const obstacle of gameState.obstacles) {
     obstacle.x -= OBSTACLE_SPEED * (deltaTime / 16);
@@ -199,11 +177,9 @@ function moveObstacles(deltaTime) {
   );
 }
 
-
 function checkCollision() {
   return gameState.obstacles.some((obstacle) => isColliding(gameState.character, obstacle));
 }
-
 
 function updateScore() {
   const char = gameState.character;
@@ -216,12 +192,9 @@ function updateScore() {
   }
 }
 
-
 function endGameLogic() {
   gameState.gameOver = true;
 }
-
-
 
 const characterEl = document.getElementById('character');
 const scoreEl = document.getElementById('score');
@@ -233,12 +206,10 @@ const startScreenEl = document.getElementById('start-screen');
 
 const obstacleEls = new WeakMap();
 
-
 function renderCharacter(char) {
   characterEl.style.left = char.x + 'px';
   characterEl.style.bottom = char.y + 'px';
 }
-
 
 function removeObstacleDiv(obstacle) {
   const div = obstacleEls.get(obstacle);
@@ -246,7 +217,6 @@ function removeObstacleDiv(obstacle) {
   div.remove();
   obstacleEls.delete(obstacle);
 }
-
 
 function updateObstacleDiv(obstacle) {
   let div = obstacleEls.get(obstacle);
@@ -259,7 +229,6 @@ function updateObstacleDiv(obstacle) {
   div.style.left = obstacle.x + 'px';
   div.style.height = obstacle.height + 'px';
 }
-
 
 function renderObstacles(obstacles) {
   for (const obstacle of obstacles) {
@@ -275,30 +244,25 @@ function renderScore(score) {
   scoreEl.textContent = 'Score: ' + score;
 }
 
-
 function showGameOver(finalScore) {
   gameOverEl.classList.remove('hidden');
   finalScoreEl.textContent = finalScore;
 }
-
 
 function renderBadge(state) {
   stateBadgeEl.textContent = { over: 'Game over', running: 'Running', ready: 'Ready' }[state];
   stateBadgeEl.className = 'preview-badge state-' + state;
 }
 
-
 function renderStartScreen(state) {
   startScreenEl.classList.toggle('hidden', state !== 'ready');
 }
-
 
 function renderState() {
   const state = currentGameState(gameState);
   renderBadge(state);
   renderStartScreen(state);
 }
-
 
 function clearContainer() {
   gameEl.querySelectorAll('.obstacle').forEach(el => el.remove());
