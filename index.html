@@ -35,8 +35,6 @@
       </div>
 
       <div class="game-frame">
-        <!-- #game is the movement boundary: x is left, y is bottom, in pixels.
-             Read gameEl.clientWidth / clientHeight for the playable dimensions. -->
         <div id="game" role="region" aria-label="Game area" aria-describedby="game-instructions" tabindex="0">
           <svg class="scenery" viewBox="0 0 1000 400" preserveAspectRatio="none" aria-hidden="true" focusable="false">
             <circle cx="815" cy="85" r="32" fill="#e6edc8" />
@@ -60,7 +58,6 @@
             <button id="restart" type="button">Try again <span aria-hidden="true">↗</span></button>
             <p class="restart-hint">Press <kbd>Space</kbd> or <kbd>Enter</kbd> to restart.</p>
           </div>
-          <!-- Tony's renderObstacles() appends obstacle elements directly to #game. -->
         </div>
         <div class="ground" aria-hidden="true"></div>
       </div>
