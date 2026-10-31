@@ -53,8 +53,6 @@ h1 span { color: #627a49; }
   background: #eef2e7;
 }
 .scenery { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-#ready-hint { position: absolute; z-index: 1; top: 38%; left: 50%; transform: translate(-50%, -50%); padding: 10px 18px; border-radius: 24px; background: #f6f5efdd; font-size: 13px; font-weight: 600; white-space: nowrap; }
-#ready-hint.hidden { display: none; }
 #character {
   position: absolute;
   left: 50px;
@@ -75,14 +73,15 @@ h1 span { color: #627a49; }
 .arena-footer p:first-child { display: flex; align-items: center; gap: 8px; color: var(--ink); }
 kbd { padding: 4px 12px; border: 1px solid #cdd2c5; border-bottom-width: 3px; border-radius: 5px; background: #f8f8f2; font: 600 12px "Segoe UI", Arial, sans-serif; }
 
-#game-over { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 20px; text-align: center; background: #f6f5eff5; }
-#game-over.hidden { display: none; }
-#game-over h2 { font-size: 48px; letter-spacing: -2px; }
+#game-over, #start-screen { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 20px; text-align: center; background: #f6f5eff5; }
+#game-over.hidden, #start-screen.hidden { display: none; }
+#game-over h2, #start-screen h2 { font-size: 48px; letter-spacing: -2px; }
 #game-over-score { color: var(--muted); }
 #final-score { font-weight: 700; color: var(--ink); }
-#restart { display: flex; align-items: center; gap: 28px; border: 0; border-radius: 8px; padding: 13px 20px; background: var(--ink); color: white; cursor: pointer; font-weight: 600; }
-#restart:hover { background: #395743; }
-#restart span { color: var(--accent); }
+#restart, #start-button { display: flex; align-items: center; gap: 28px; border: 0; border-radius: 8px; padding: 13px 20px; background: var(--ink); color: white; cursor: pointer; font-weight: 600; }
+#restart:hover, #start-button:hover { background: #395743; }
+#restart span, #start-button span { color: var(--accent); }
+.restart-hint { margin-top: -8px; font-size: 12px; color: var(--muted); }
 :focus-visible { outline: 3px solid #526e30; outline-offset: 4px; }
 #game:focus-visible { outline-offset: -4px; }
 

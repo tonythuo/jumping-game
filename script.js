@@ -39,6 +39,7 @@ const gameState = {
   obstacles: [],
   score: 0,
   gameOver: false,
+  gameOverAt: 0, // when the run ended; gates Space-restart during the lockout
   running: false, // false = ready-pause on load/restart, true = run in progress
   lastSpawnTime: 0,
   lastTimestamp: 0
@@ -48,6 +49,7 @@ const GRAVITY = 0.5;
 const JUMP_FORCE = -12;
 const OBSTACLE_SPEED = 5;
 const SPAWN_INTERVAL = 1500;
+const RESTART_LOCKOUT_MS = 400; // Space can't insta-restart right after death
 
 // ============================================================
 // SECTION 1 — KARIM: Structure, Input & Orchestration
@@ -55,11 +57,12 @@ const SPAWN_INTERVAL = 1500;
 
 // resets gameState, starts loop
 let frameId = 0;
-function initGame() {
+function initGame(autoStart = false) {
   gameState.score = 0;
   gameState.obstacles = [];
   gameState.gameOver = false;
-  gameState.running = false; // ready-pause: first Space starts the run
+  gameState.gameOverAt = 0;
+  gameState.running = autoStart; // false = ready-pause on load, true = restart runs immediately
   gameState.lastSpawnTime = 0;
   gameState.lastTimestamp = 0;
   Object.assign(gameState.character, { x: 50, y: 0, velocityY: 0 });
@@ -68,6 +71,13 @@ function initGame() {
   renderState();
   if (frameId) cancelAnimationFrame(frameId); // no double loop on restart
   frameId = requestAnimationFrame(gameLoop);
+}
+
+// starts the run from the ready state (Space on start screen / start button)
+function startRun() {
+  if (gameState.running || gameState.gameOver) return;
+  gameState.running = true;
+  renderState();
 }
 
 // calculates deltaTime, calls update() then render()
@@ -89,12 +99,31 @@ function gameLoop(timestamp) {
   frameId = requestAnimationFrame(gameLoop);
 }
 
-// calls jump() on spacebar
+// calls jump() on spacebar; Enter starts/restarts without jumping
 function handleKeydown(event) {
-  if (event.code !== 'Space' || event.repeat) return;
-  event.preventDefault(); // keep space from scrolling the page
-  if (!gameState.running) gameState.running = true; // first Space starts the run
-  jump();
+  if (event.repeat) return;
+  if (event.code === 'Space') {
+    event.preventDefault(); // keep space from scrolling the page
+    if (gameState.gameOver) {
+      // Space restarts too — but not the instant you die, so score-spamming
+      // can't wipe the game-over screen before you've read it
+      if (performance.now() - gameState.gameOverAt >= RESTART_LOCKOUT_MS) {
+        initGame(true);
+        jump();
+      }
+      return;
+    }
+    startRun(); // first Space on the start screen begins the run
+    jump();
+  } else if (event.code === 'Enter' || event.code === 'NumpadEnter') {
+    event.preventDefault(); // stop a focused overlay button from also firing
+    if (gameState.gameOver) {
+      initGame(true);
+    } else if (!gameState.running) {
+      startRun(); // start screen: begin the run, no jump
+    }
+    // mid-run: Enter is a no-op
+  }
 }
 
 // sets character.velocityY = JUMP_FORCE
@@ -112,7 +141,7 @@ function update(deltaTime, timestamp) {
     gameState.lastSpawnTime = timestamp;
   }
   updateScore();
-  if (checkCollision()) endGame();
+  if (checkCollision()) endGame(timestamp);
 }
 
 // calls Tony's render functions
@@ -124,8 +153,10 @@ function render() {
 }
 
 // orchestrator — calls endGameLogic() + showGameOver()
-function endGame() {
+// timestamp: the frame time of the collision; defaults to wall clock for direct calls
+function endGame(timestamp = performance.now()) {
   endGameLogic();
+  gameState.gameOverAt = timestamp;
   showGameOver(gameState.score);
   renderState();
 }
@@ -230,7 +261,7 @@ const gameEl = document.getElementById('game');
 const gameOverEl = document.getElementById('game-over');
 const finalScoreEl = document.getElementById('final-score');
 const stateBadgeEl = document.getElementById('state-badge');
-const readyHintEl = document.getElementById('ready-hint');
+const startScreenEl = document.getElementById('start-screen');
 
 const obstacleEls = new WeakMap(); // obstacle object -> its div
 
@@ -274,12 +305,12 @@ function showGameOver(finalScore) {
   finalScoreEl.textContent = finalScore;
 }
 
-// badge + ready hint mirror gameState (called from render and endGame)
+// badge + start screen mirror gameState (called from render and endGame)
 function renderState() {
   const state = gameState.gameOver ? 'over' : gameState.running ? 'running' : 'ready';
   stateBadgeEl.textContent = { over: 'Game over', running: 'Running', ready: 'Ready' }[state];
   stateBadgeEl.className = 'preview-badge state-' + state;
-  readyHintEl.classList.toggle('hidden', state !== 'ready');
+  startScreenEl.classList.toggle('hidden', state !== 'ready');
 }
 
 // removes all obstacle divs from DOM
@@ -289,5 +320,6 @@ function clearContainer() {
 
 // wiring (after element refs — initGame touches gameEl/gameOverEl on load)
 document.addEventListener('keydown', handleKeydown);
-document.getElementById('restart').addEventListener('click', initGame);
-initGame(); // start the loop on page load, not only on restart
+document.getElementById('restart').addEventListener('click', () => initGame(true));
+document.getElementById('start-button').addEventListener('click', startRun);
+initGame(); // start screen on load; the run begins on first Space or Start click
