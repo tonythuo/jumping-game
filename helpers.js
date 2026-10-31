@@ -79,6 +79,34 @@ function distanceBetweenRects(rect1, rect2) {
  * @param {number} speed - How far to move the rectangle.
  * @param {'up'|'down'|'left'|'right'} direction - The direction to move in.
  */
+/**
+ * Checks if a character stands on the ground.
+ * @param {{y: number, velocityY: number}} character - The character to check.
+ * @returns {boolean} True when the character is grounded.
+ */
+function isGrounded(character) {
+    return character.y <= 0 && character.velocityY === 0;
+}
+
+/**
+ * Maps the game state flags to a display state.
+ * @param {{gameOver: boolean, running: boolean}} state - The game state to inspect.
+ * @returns {'over'|'running'|'ready'} The display state name.
+ */
+function currentGameState(state) {
+    if (state.gameOver) return 'over';
+    return state.running ? 'running' : 'ready';
+}
+
+/**
+ * Checks if a rectangle has moved past the left edge of the screen.
+ * @param {{x: number}} obstacle - The rectangle to check.
+ * @returns {boolean} True when the rectangle is fully off screen.
+ */
+function isOffscreen(obstacle) {
+    return obstacle.x < -20;
+}
+
 function moveRect(rect, speed, direction) {
     switch (direction) {
         case 'up':
